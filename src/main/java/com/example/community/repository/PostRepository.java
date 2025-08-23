@@ -8,4 +8,6 @@ import org.springframework.data.domain.Pageable;
 public interface PostRepository extends JpaRepository<Post, Long> {
     Page<Post> findByTitleContainingIgnoreCase(String q, Pageable pageable);
     boolean existsByIdAndAuthor_Username(Long id, String username);
+    // ★ username 말고 id 기준으로
+    boolean existsByIdAndAuthor_Id(Long postId, Long authorId);
 }
