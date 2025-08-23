@@ -5,12 +5,14 @@ import com.example.community.domain.Member;
 import com.example.community.domain.auth.RefreshToken;
 import com.example.community.repository.MemberRepository;
 import com.example.community.service.RefreshTokenService;
+import jakarta.servlet.http.HttpServletRequest;                 // ★ 추가
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;                        // ★ 추가
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,15 +29,16 @@ public class AuthController {
 
     private final AuthenticationManager am;
     private final JwtUtil jwt;
-    private final MemberRepository members;     // ← 필드명 일관
-    private final PasswordEncoder encoder;      // ← 필드명 일관
+    private final MemberRepository members;
+    private final PasswordEncoder encoder;
     private final RefreshTokenService refreshService;
 
     @Value("${refresh.exp-ms}") private long refreshExpMs;
-    @Value("${refresh.cookie.name}") private String cookieName;
-    @Value("${refresh.cookie.path}") private String cookiePath;
-    @Value("${refresh.cookie.secure}") private boolean cookieSecure;
-    @Value("${refresh.cookie.same-site}") private String sameSite;
+    @Value("${refresh.cookie.name}") private String cookieName;      // 예: "refresh_token"
+    @Value("${refresh.cookie.path}") private String cookiePath;      // 예: "/api/auth"
+    @Value("${refresh.cookie.secure}") private boolean cookieSecure; // dev=false, prod=true
+    @Value("${refresh.cookie.same-site}") private String sameSite;   // "Lax" | "None" | "Strict"
+    @Value("${refresh.cookie.domain:}") private String cookieDomain; // ★ 선택(없으면 빈 문자열)
 
     /* 회원가입 */
     @PostMapping("/signup")
@@ -49,7 +52,6 @@ public class AuthController {
                 .username(req.getUsername())
                 .email(req.getEmail())
                 .password(encoder.encode(req.getPassword()))
-                // ↓ roles 컬렉션에 기본 권한 추가 (ROLE_ 접두사 포함)
                 .roles(new java.util.HashSet<>(java.util.List.of("ROLE_USER")))
                 .build();
 
@@ -67,57 +69,67 @@ public class AuthController {
         String access = jwt.generateAccessToken(user.getUsername());
         String refreshRaw = refreshService.issue(user);
 
-        ResponseCookie rc = ResponseCookie.from(cookieName, refreshRaw)
+        ResponseCookie.ResponseCookieBuilder lb = ResponseCookie.from(cookieName, refreshRaw)
                 .httpOnly(true).secure(cookieSecure).path(cookiePath)
                 .maxAge(Duration.ofMillis(refreshExpMs))
-                .sameSite(sameSite)
-                .build();
+                .sameSite(sameSite);
+        if (!cookieDomain.isBlank()) lb.domain(cookieDomain);        // ★ domain 적용(필요 시)
+        ResponseCookie loginCookie = lb.build();
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", rc.toString())
+                .header(HttpHeaders.SET_COOKIE, loginCookie.toString()) // ★ 상수 사용
                 .body(new TokenRes(access));
     }
 
-    /* 리프레시: 새 Access + (로테이션된) 새 Refresh 쿠키 */
+    /* 리프레시: 새 Access + (회전된) 새 Refresh 쿠키 */
     @PostMapping("/refresh")
-    public ResponseEntity<TokenRes> refresh(
-            @CookieValue(name = "${refresh.cookie.name}", required = false) String refreshRaw) { // ← 프로퍼티 사용
-        if (refreshRaw == null) return ResponseEntity.status(401).build();
+    public ResponseEntity<TokenRes> refresh(HttpServletRequest req) { // ★ @CookieValue → Request 직접 읽기
+        // 1) 쿠키에서 refresh 읽기 (설정된 이름으로)
+        String refreshRaw = readCookie(req, cookieName);              // ★ 이름 일관화
+        if (refreshRaw == null || refreshRaw.isBlank())
+            return ResponseEntity.status(401).build();
 
+        // 2) 서버 저장소에서 유효성 검사(만료/폐기 여부 포함)
         RefreshToken current = refreshService.validateAndGet(refreshRaw);
-        if (current == null) return ResponseEntity.status(401).build();
+        if (current == null)
+            return ResponseEntity.status(401).build();
 
+        // 3) 회전(rotate): 기존 토큰 무효화 + 새 refresh 발급
         String newRaw = refreshService.rotate(current);
+
+        // 4) 새 access 발급
         String access = jwt.generateAccessToken(current.getUser().getUsername());
 
-        ResponseCookie rc = ResponseCookie.from(cookieName, newRaw)
+        // 5) 동일 속성으로 새 refresh 쿠키 설정
+        ResponseCookie.ResponseCookieBuilder rb = ResponseCookie.from(cookieName, newRaw)
                 .httpOnly(true).secure(cookieSecure).path(cookiePath)
                 .maxAge(Duration.ofMillis(refreshExpMs))
-                .sameSite(sameSite)
-                .build();
+                .sameSite(sameSite);
+        if (!cookieDomain.isBlank()) rb.domain(cookieDomain);         // ★ domain 적용(필요 시)
+        ResponseCookie rc = rb.build();
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", rc.toString())
+                .header(HttpHeaders.SET_COOKIE, rc.toString())
                 .body(new TokenRes(access));
     }
 
-    /* 로그아웃: Refresh 폐기 + 쿠키 삭제 */
+    /* 로그아웃: Refresh 폐기 + 쿠키 삭제(동일 속성 + Max-Age=0) */
     @PostMapping("/logout")
-    public ResponseEntity<String> logout(
-            @CookieValue(name = "${refresh.cookie.name}", required = false) String refreshRaw) { // ← 프로퍼티 사용
-        if (refreshRaw != null) {
-            // 서비스에 위임해서 확실히 저장/영속되게
+    public ResponseEntity<String> logout(HttpServletRequest req) {   // ★ @CookieValue 제거
+        String refreshRaw = readCookie(req, cookieName);             // ★ 이름 일관화
+        if (refreshRaw != null && !refreshRaw.isBlank()) {
             refreshService.revoke(refreshRaw);
         }
 
-        ResponseCookie rc = ResponseCookie.from(cookieName, "")
+        ResponseCookie.ResponseCookieBuilder db = ResponseCookie.from(cookieName, "")
                 .httpOnly(true).secure(cookieSecure).path(cookiePath)
-                .maxAge(0)
-                .sameSite(sameSite)
-                .build();
+                .maxAge(0)                                           // ★ 삭제
+                .sameSite(sameSite);
+        if (!cookieDomain.isBlank()) db.domain(cookieDomain);        // ★ domain 적용(필요 시)
+        ResponseCookie deleteCookie = db.build();
 
         return ResponseEntity.ok()
-                .header("Set-Cookie", rc.toString())
+                .header(HttpHeaders.SET_COOKIE, deleteCookie.toString())
                 .body("ok");
     }
 
@@ -140,8 +152,17 @@ public class AuthController {
         private final String accessToken;
     }
 
+    /* ===== 내부 유틸: 쿠키 읽기 ===== */
+    private String readCookie(HttpServletRequest req, String name) {  // ★ 공통 유틸
+        var cs = req.getCookies();
+        if (cs == null) return null;
+        for (var c : cs) {
+            if (name.equals(c.getName())) return c.getValue();
+        }
+        return null;
+    }
 
-
+    /*========TEST========*/
     @GetMapping("/whoami")
     public java.util.Map<String, Object> whoami() {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
