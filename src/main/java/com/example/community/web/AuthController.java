@@ -63,9 +63,9 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<TokenRes> login(@Valid @RequestBody LoginReq req) {
         var auth = am.authenticate(new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword()));
-        var principal = (org.springframework.security.core.userdetails.User) auth.getPrincipal();
+        var principal = (com.example.community.security.MemberDetails) auth.getPrincipal();
 
-        Member user = members.findByUsername(principal.getUsername()).orElseThrow();
+        Member user = members.findById(principal.id()).orElseThrow(); // ID로 조회
         String access = jwt.generateAccessToken(user.getUsername());
         String refreshRaw = refreshService.issue(user);
 
@@ -166,9 +166,25 @@ public class AuthController {
     @GetMapping("/whoami")
     public java.util.Map<String, Object> whoami() {
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return java.util.Map.of("authenticated", false);
+        }
+        
+        Object principal = auth.getPrincipal();
+        if (principal instanceof com.example.community.security.MemberDetails memberDetails) {
+            return java.util.Map.of(
+                    "authenticated", true,
+                    "id", memberDetails.id(),
+                    "username", memberDetails.getUsername(),
+                    "authorities", auth.getAuthorities()
+            );
+        }
+        
+        // 기존 방식 호환성 유지
         return java.util.Map.of(
-                "principal", auth == null ? null : auth.getName(),
-                "authorities", auth == null ? null : auth.getAuthorities()
+                "authenticated", true,
+                "principal", auth.getName(),
+                "authorities", auth.getAuthorities()
         );
     }
 }

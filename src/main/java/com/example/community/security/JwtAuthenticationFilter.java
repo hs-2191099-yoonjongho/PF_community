@@ -27,8 +27,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = auth.substring(7);
             if (jwtUtil.validateAccess(token)) {
                 String username = jwtUtil.getUsername(token);
-                var user = uds.loadUserByUsername(username);
-                var authentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+                // A안) DB조회로 MemberDetails 로딩
+                var principal = (MemberDetails) uds.loadUserByUsername(username);
+
+                // B안) 토큰에 uid/roles 넣었으면 DB조회 없이 직접 MemberDetails 생성 가능
+                // Long uid = jwt.getUid(token); List<String> roles = jwt.getRoles(token) ...
+
+                var authentication = new UsernamePasswordAuthenticationToken(
+                        principal, null, principal.getAuthorities());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         }
