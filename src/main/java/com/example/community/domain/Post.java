@@ -4,7 +4,7 @@ import com.example.community.domain.support.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Getter @Setter
+@Getter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @Entity
 @Table(name = "posts", indexes = @Index(name = "idx_post_author", columnList = "author_id"))
@@ -25,4 +25,52 @@ public class Post extends BaseTimeEntity {
 
     @Column(nullable = false)
     private long viewCount;
+
+    @Builder.Default  // Builder 패턴에서 기본값 설정
+    @Column(nullable = false)
+    private long likeCount = 0L;  // 추천수 필드 추가
+
+    @Version // 낙관적 락으로 동시성 제어
+    private Long version;
+    
+    // 비즈니스 메서드: 조회수 증가
+    public void incrementViewCount() {
+        this.viewCount++;
+    }
+    
+    // 비즈니스 메서드: 추천수 증가
+    public void incrementLikeCount() {
+        this.likeCount++;
+    }
+    
+    // 비즈니스 메서드: 추천수 감소 (추천 취소)
+    public void decrementLikeCount() {
+        if (this.likeCount > 0) {
+            this.likeCount--;
+        }
+    }
+    
+    // 비즈니스 메서드: 게시글 내용 수정
+    public void updateContent(String title, String content) {
+        validateTitle(title);
+        validateContent(content);
+        this.title = title.trim();
+        this.content = content.trim();
+    }
+    
+    // private 검증 메서드들
+    private void validateTitle(String title) {
+        if (title == null || title.trim().isEmpty()) {
+            throw new IllegalArgumentException("제목은 필수입니다");
+        }
+        if (title.trim().length() > 200) {
+            throw new IllegalArgumentException("제목은 200자를 초과할 수 없습니다");
+        }
+    }
+    
+    private void validateContent(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            throw new IllegalArgumentException("내용은 필수입니다");
+        }
+    }
 }

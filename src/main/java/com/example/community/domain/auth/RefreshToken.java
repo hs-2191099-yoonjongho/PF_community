@@ -1,33 +1,48 @@
 package com.example.community.domain.auth;
 
 import com.example.community.domain.Member;
+import com.example.community.domain.support.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
 
 @Getter
-@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(indexes = {
-        @Index(name="idx_refresh_user", columnList = "user_id")
-})
-public class RefreshToken {
+@Table(
+    name = "refresh_tokens",
+    indexes = {
+        @Index(name = "idx_refresh_token_user_revoked_id", columnList = "user_id,revoked,id"),
+        @Index(name = "idx_refresh_token_expires", columnList = "expires_at")
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_token_hash", columnNames = "token_hash")
+    }
+)
+public class RefreshToken extends BaseTimeEntity {
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 128)
-    private String tokenValue; // 원문 저장(포폴 수준: 단순), 실무는 해시 추천
+    @Column(name = "token_hash", nullable = false, length = 44)  // Base64 길이: 44자
+    private String tokenHash;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
     private Member user;
 
-    @Column(nullable = false)
+    @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
     @Column(nullable = false)
+    @Setter  // 💡 이것만 setter 허용 - 실제로 사용됨
     private boolean revoked;
+    
+    // 비즈니스 메서드: 토큰 폐기
+    public void revoke() {
+        this.revoked = true;
+    }
 }

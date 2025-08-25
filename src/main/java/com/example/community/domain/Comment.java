@@ -4,7 +4,7 @@ import com.example.community.domain.support.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Getter @Setter
+@Getter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @Entity
 @Table(name = "comments", indexes = {
