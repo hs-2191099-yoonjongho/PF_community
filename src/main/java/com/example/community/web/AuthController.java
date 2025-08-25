@@ -4,6 +4,8 @@ import com.example.community.config.JwtUtil;
 import com.example.community.domain.Member;
 import com.example.community.domain.auth.RefreshToken;
 import com.example.community.repository.MemberRepository;
+import com.example.community.service.MemberService;
+import com.example.community.service.dto.AuthDtos;
 import com.example.community.service.RefreshTokenService;
 import jakarta.servlet.http.HttpServletRequest;                 // ★ 추가
 import jakarta.validation.Valid;
@@ -17,7 +19,6 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
@@ -30,8 +31,8 @@ public class AuthController {
     private final AuthenticationManager am;
     private final JwtUtil jwt;
     private final MemberRepository members;
-    private final PasswordEncoder encoder;
-    private final RefreshTokenService refreshService;
+    private final RefreshTokenService refreshTokenService;
+    private final MemberService memberService;
 
     @Value("${refresh.exp-ms}") private long refreshExpMs;
     @Value("${refresh.cookie.name}") private String cookieName;      // 예: "refresh_token"
@@ -43,20 +44,20 @@ public class AuthController {
     /* 회원가입 */
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest req) {
-        if (members.findByUsername(req.getUsername()).isPresent())
-            return ResponseEntity.badRequest().body("이미 존재하는 사용자명입니다.");
-        if (members.existsByEmail(req.getEmail()))
-            return ResponseEntity.badRequest().body("이미 존재하는 이메일입니다.");
-
-        Member m = Member.builder()
-                .username(req.getUsername())
-                .email(req.getEmail())
-                .password(encoder.encode(req.getPassword()))
-                .roles(new java.util.HashSet<>(java.util.List.of("ROLE_USER")))
-                .build();
-
-        members.save(m);
-        return ResponseEntity.ok("회원가입 성공");
+        try {
+            // DTO 변환하여 Service 로직 활용
+            AuthDtos.SignUp dto = new AuthDtos.SignUp(
+                req.getUsername(), 
+                req.getEmail(), 
+                req.getPassword()
+            );
+            
+            memberService.signUp(dto);
+            return ResponseEntity.ok("회원가입 성공");
+            
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     /* 로그인: Access 발급 + Refresh 쿠키 */
@@ -65,9 +66,10 @@ public class AuthController {
         var auth = am.authenticate(new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword()));
         var principal = (com.example.community.security.MemberDetails) auth.getPrincipal();
 
-        Member user = members.findById(principal.id()).orElseThrow(); // ID로 조회
-        String access = jwt.generateAccessToken(user.getUsername());
-        String refreshRaw = refreshService.issue(user);
+        Member user = members.findByUsername(principal.getUsername())
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + principal.getUsername()));
+        String access = jwt.generateAccessToken(principal.getUsername());
+        String refreshRaw = refreshTokenService.issue(user);
 
         ResponseCookie.ResponseCookieBuilder lb = ResponseCookie.from(cookieName, refreshRaw)
                 .httpOnly(true).secure(cookieSecure).path(cookiePath)
@@ -90,12 +92,12 @@ public class AuthController {
             return ResponseEntity.status(401).build();
 
         // 2) 서버 저장소에서 유효성 검사(만료/폐기 여부 포함)
-        RefreshToken current = refreshService.validateAndGet(refreshRaw);
+        RefreshToken current = refreshTokenService.validateAndGet(refreshRaw);
         if (current == null)
             return ResponseEntity.status(401).build();
 
         // 3) 회전(rotate): 기존 토큰 무효화 + 새 refresh 발급
-        String newRaw = refreshService.rotate(current);
+        String newRaw = refreshTokenService.rotate(current);
 
         // 4) 새 access 발급
         String access = jwt.generateAccessToken(current.getUser().getUsername());
@@ -118,7 +120,7 @@ public class AuthController {
     public ResponseEntity<String> logout(HttpServletRequest req) {   // ★ @CookieValue 제거
         String refreshRaw = readCookie(req, cookieName);             // ★ 이름 일관화
         if (refreshRaw != null && !refreshRaw.isBlank()) {
-            refreshService.revoke(refreshRaw);
+            refreshTokenService.revoke(refreshRaw);
         }
 
         ResponseCookie.ResponseCookieBuilder db = ResponseCookie.from(cookieName, "")
@@ -160,31 +162,5 @@ public class AuthController {
             if (name.equals(c.getName())) return c.getValue();
         }
         return null;
-    }
-
-    /*========TEST========*/
-    @GetMapping("/whoami")
-    public java.util.Map<String, Object> whoami() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
-            return java.util.Map.of("authenticated", false);
-        }
-        
-        Object principal = auth.getPrincipal();
-        if (principal instanceof com.example.community.security.MemberDetails memberDetails) {
-            return java.util.Map.of(
-                    "authenticated", true,
-                    "id", memberDetails.id(),
-                    "username", memberDetails.getUsername(),
-                    "authorities", auth.getAuthorities()
-            );
-        }
-        
-        // 기존 방식 호환성 유지
-        return java.util.Map.of(
-                "authenticated", true,
-                "principal", auth.getName(),
-                "authorities", auth.getAuthorities()
-        );
     }
 }

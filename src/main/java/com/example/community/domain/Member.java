@@ -6,7 +6,7 @@ import lombok.*;
 
 import java.util.Set;
 
-@Getter @Setter
+@Getter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @Entity
 @Table(name = "members", indexes = {
@@ -26,7 +26,7 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false, length = 200)
     private String password;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "member_roles", joinColumns = @JoinColumn(name = "member_id"))
     @Column(name = "role")
     private Set<String> roles;

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.stream.Collectors;
 
@@ -16,6 +17,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     private final MemberRepository members;
 
     @Override
+    @Transactional(readOnly = true) 
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         Member m = members.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("사용자를 찾을 수 없습니다: " + username));

@@ -14,6 +14,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.List;
 
 @RequiredArgsConstructor
 @RestController
@@ -33,6 +34,14 @@ public class CommentController {
         Comment saved = commentService.add(postId, me.id(), req.content());
         return ResponseEntity.created(URI.create("/api/comments/" + saved.getId()))
                 .body(CommentRes.of(saved));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<CommentRes>> getByPost(@RequestParam Long postId) {
+        List<CommentRes> comments = commentService.getByPost(postId).stream()
+                .map(CommentRes::of)
+                .toList();
+        return ResponseEntity.ok(comments);
     }
 
     @PreAuthorize("hasRole('ADMIN') or @commentSecurity.isAuthor(#id, authentication)")

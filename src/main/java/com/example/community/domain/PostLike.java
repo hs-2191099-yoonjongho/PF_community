@@ -3,7 +3,7 @@ package com.example.community.domain;
 import jakarta.persistence.*;
 import lombok.*;
 
-@Getter @Setter
+@Getter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @Entity
 @Table(name = "post_likes",
