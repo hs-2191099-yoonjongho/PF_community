@@ -2,12 +2,6 @@
 .gradle/
 build/
 
-# Gradle Wrapper (커밋 대상)
-!gradle/wrapper/gradle-wrapper.jar
-!gradle/wrapper/gradle-wrapper.properties
-!gradlew
-!gradlew.bat
-
 ### IntelliJ IDEA ###
 .idea/
 *.iml
@@ -92,3 +86,9 @@ uploads/
 
 ### IntelliJ Run configs ###
 .run/
+
+# Keep Gradle Wrapper in VCS (must be after *.jar ignore above)
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradlew
+!gradlew.bat
