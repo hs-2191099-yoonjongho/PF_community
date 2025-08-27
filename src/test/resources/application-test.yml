@@ -1,8 +1,12 @@
 spring:
+  profiles:
+    include: local   # test 실행 시 local 프로필도 함께 활성화 → LocalStorageService 빈 생성
   datasource:
-    url: ${DB_URL:jdbc:mysql://host.docker.internal:3306/board_test?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    url: ${DB_URL:jdbc:mysql://host.docker.internal:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:1234}
+    hikari:
+      connection-init-sql: "SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci"
   jpa:
     hibernate:
       ddl-auto: update
@@ -19,3 +23,31 @@ logging:
   level:
     org.hibernate.SQL: info
     org.hibernate.orm.jdbc.bind: warn
+
+# 테스트에서 필요한 보안/스토리지 등 플레이스홀더 채움
+jwt:
+  secret: ${JWT_SECRET:local-test-secret-min-32-chars-1234567890}
+  access-exp-ms: ${JWT_ACCESS_EXP_MS:3600000}
+  issuer: ${JWT_ISSUER:community-app}
+
+refresh:
+  exp-ms: ${REFRESH_EXP_MS:1209600000}
+  cookie:
+    name: ${REFRESH_COOKIE_NAME:refresh_token}
+    path: ${REFRESH_COOKIE_PATH:/api/auth}
+    secure: ${REFRESH_COOKIE_SECURE:false}
+    same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
+    domain: ${REFRESH_COOKIE_DOMAIN:}
+
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  security:
+    token-hash-algorithm: ${SECURITY_HASH_ALGORITHM:SHA-256}
+    max-refresh-tokens-per-user: ${MAX_REFRESH_TOKENS:5}
+    enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:false}
+  storage:
+    provider: local
+    public-base-url: http://localhost:8080/files
+    local:
+      base-path: uploads
