@@ -1,6 +1,4 @@
 spring:
-  profiles:
-    include: local   # test 실행 시 local 프로필도 함께 활성화 → LocalStorageService 빈 생성
   datasource:
     url: ${DB_URL:jdbc:mysql://host.docker.internal:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci}
     username: ${DB_USERNAME:root}
