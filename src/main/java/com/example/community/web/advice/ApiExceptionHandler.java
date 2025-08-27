@@ -2,6 +2,7 @@ package com.example.community.web.advice;
 
 import com.example.community.service.exception.EntityNotFoundException;
 import com.example.community.service.exception.TokenReuseDetectedException;
+import com.example.community.service.exception.WithdrawalException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +41,16 @@ public class ApiExceptionHandler {
     public ResponseEntity<?> handleEntityNotFound(EntityNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "요청한 리소스를 찾을 수 없습니다", "details", e.getMessage()));
+    }
+    
+    @ExceptionHandler(WithdrawalException.class)
+    public ResponseEntity<?> handleWithdrawal(WithdrawalException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                        "error", e.getErrorCode(),
+                        "message", e.getMessage(), 
+                        "timestamp", LocalDateTime.now()
+                ));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

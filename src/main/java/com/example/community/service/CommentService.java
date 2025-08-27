@@ -6,8 +6,12 @@ import com.example.community.domain.Post;
 import com.example.community.repository.CommentRepository;
 import com.example.community.repository.MemberRepository;
 import com.example.community.repository.PostRepository;
+import com.example.community.repository.dto.CommentProjection;
 import com.example.community.service.exception.EntityNotFoundException;
+import com.example.community.util.PageableUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,11 +34,53 @@ public class CommentService {
         return comments.save(c);
     }
 
+    /**
+     * @deprecated 최적화되지 않은 메서드입니다. 대신 {@link #getProjectionsByPostWithPaging(Long, Pageable)}를 사용하세요.
+     */
+    @Deprecated(forRemoval = true)
     @Transactional(readOnly = true)
     public List<Comment> getByPost(Long postId) {
         Post post = posts.findById(postId)
                 .orElseThrow(() -> new EntityNotFoundException("게시글", postId));
         return comments.findByPost(post);
+    }
+    
+    /**
+     * @deprecated 최적화되지 않은 메서드입니다. 대신 {@link #getProjectionsByPostWithPaging(Long, Pageable)}를 사용하세요.
+     */
+    @Deprecated(forRemoval = true)
+    @Transactional(readOnly = true)
+    public Page<Comment> getByPostWithPaging(Long postId, Pageable pageable) {
+        // 게시글 존재 여부 확인
+        if (!posts.existsById(postId)) {
+            throw new EntityNotFoundException("게시글", postId);
+        }
+        
+        // 정렬 필드 화이트리스트 검증 (이미 컨트롤러에서 적용되었을 수 있으나, 서비스 단에서도 보안 강화)
+        Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
+        
+        // 최적화된 쿼리 사용 (Post 엔티티 조회 없이 직접 postId로 조회)
+        return comments.findByPostId(postId, safePageable);
+    }
+    
+    /**
+     * 게시글에 달린 댓글을 DTO 프로젝션으로 페이징하여 조회 (N+1 쿼리 문제 해결)
+     * @param postId 게시글 ID
+     * @param pageable 페이징 정보
+     * @return 페이징된 댓글 프로젝션 목록
+     */
+    @Transactional(readOnly = true)
+    public Page<CommentProjection> getProjectionsByPostWithPaging(Long postId, Pageable pageable) {
+        // 게시글 존재 여부 확인
+        if (!posts.existsById(postId)) {
+            throw new EntityNotFoundException("게시글", postId);
+        }
+        
+        // 정렬 필드 화이트리스트 검증
+        Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
+        
+        // DTO 프로젝션 사용하여 조회 (N+1 문제 해결)
+        return comments.findProjectionsByPostId(postId, safePageable);
     }
 
     @Transactional

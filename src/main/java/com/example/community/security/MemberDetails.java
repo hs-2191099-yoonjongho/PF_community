@@ -32,4 +32,28 @@ public record MemberDetails(
     public String getPassword() {
         return password;
     }
+
+    // 계정 만료 여부: 기본 활성 처리
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    // 계정 잠김 여부: 기본 활성 처리
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    // 자격 증명(비밀번호) 만료 여부: 기본 활성 처리
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    // 계정 활성 여부: 기본 활성 처리 (탈퇴 등은 Service에서 제어)
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
 }

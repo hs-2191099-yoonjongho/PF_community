@@ -63,10 +63,10 @@ public class AuthController {
     /* 로그인: Access 발급 + Refresh 쿠키 */
     @PostMapping("/login")
     public ResponseEntity<TokenRes> login(@Valid @RequestBody LoginReq req) {
-        var auth = am.authenticate(new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword()));
+        var auth = am.authenticate(new UsernamePasswordAuthenticationToken(req.getEmail(), req.getPassword()));
         var principal = (com.example.community.security.MemberDetails) auth.getPrincipal();
 
-        Member user = members.findByUsername(principal.getUsername())
+        Member user = members.findByEmail(principal.getUsername())
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + principal.getUsername()));
         String access = jwt.generateAccessToken(principal.getUsername());
         String refreshRaw = refreshTokenService.issue(user);
@@ -100,7 +100,7 @@ public class AuthController {
         String newRaw = refreshTokenService.rotate(current);
 
         // 4) 새 access 발급
-        String access = jwt.generateAccessToken(current.getUser().getUsername());
+        String access = jwt.generateAccessToken(current.getUser().getEmail());
 
         // 5) 동일 속성으로 새 refresh 쿠키 설정
         ResponseCookie.ResponseCookieBuilder rb = ResponseCookie.from(cookieName, newRaw)
@@ -145,7 +145,7 @@ public class AuthController {
 
     @Data
     static class LoginReq {
-        @NotBlank private String username;
+        @Email @NotBlank private String email;
         @NotBlank private String password;
     }
 

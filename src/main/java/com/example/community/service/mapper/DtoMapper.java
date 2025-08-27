@@ -6,6 +6,7 @@ import com.example.community.domain.Comment;
 import com.example.community.web.dto.PostRes;
 import com.example.community.web.dto.MemberRes;
 import com.example.community.web.dto.CommentRes;
+import com.example.community.web.dto.PostImageRes;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,6 +23,9 @@ public class DtoMapper {
                 toMemberRes(post.getAuthor()),
                 post.getViewCount(),
                 post.getLikeCount(),  // 🎯 likeCount 필드 추가
+                post.getBoardType(),
+                post.getBoardType().getDescription(),
+                post.getImages().stream().map(PostImageRes::of).toList(),
                 post.getCreatedAt()
         );
     }

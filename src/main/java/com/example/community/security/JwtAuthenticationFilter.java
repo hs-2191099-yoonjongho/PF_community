@@ -29,9 +29,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = auth.substring(7);
             try {
                 if (jwtUtil.validateAccess(token)) {
-                    String username = jwtUtil.getUsername(token);
+                    String email = jwtUtil.getEmail(token);
                     // A안) DB조회로 MemberDetails 로딩
-                    var principal = (MemberDetails) uds.loadUserByUsername(username);
+                    var principal = (MemberDetails) uds.loadUserByUsername(email);
 
                     // B안) 토큰에 uid/roles 넣었으면 DB조회 없이 직접 MemberDetails 생성 가능
                     // Long uid = jwt.getUid(token); List<String> roles = jwt.getRoles(token) ...

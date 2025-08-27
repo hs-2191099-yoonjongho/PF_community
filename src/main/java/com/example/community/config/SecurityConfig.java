@@ -80,6 +80,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts/**", "/api/comments/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/files/**").permitAll()   // 정적 리소스 공개
+                        .requestMatchers("/api/files/**").authenticated()           // 파일 업로드/삭제는 인증 필요
                         .anyRequest().authenticated()
                 );
 
@@ -107,7 +109,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(PasswordEncoder encoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(encoder);
         return new ProviderManager(provider);
     }
