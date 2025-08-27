@@ -21,8 +21,9 @@ bin/
 .classpath
 
 ### Spring Boot / Config ###
-application.yml
-application-*.yml
+# Only ignore main resources configs; allow test resources configs to be tracked
+/src/main/resources/application.yml
+/src/main/resources/application-*.yml
 .env
 .env.*
 
