@@ -163,6 +163,8 @@ ${SSM_PREFIX}/db/pass
 ${SSM_PREFIX}/jwt/secret
 ${SSM_PREFIX}/jwt/access-exp-ms
 ${SSM_PREFIX}/refresh/exp-ms
+${SSM_PREFIX}/refresh/cookie/name
+${SSM_PREFIX}/refresh/cookie/path
 ${SSM_PREFIX}/refresh/cookie/secure
 ${SSM_PREFIX}/refresh/cookie/same-site
 ${SSM_PREFIX}/refresh/cookie/domain
@@ -293,6 +295,8 @@ JWT_SECRET=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/secret" --with-decryp
 JWT_ACCESS_EXP_MS=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/access-exp-ms" --with-decryption --query 'Parameter.Value' --output text)
 JWT_ISSUER=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/issuer" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "community-app")
 REFRESH_EXP_MS=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/exp-ms" --with-decryption --query 'Parameter.Value' --output text)
+REFRESH_COOKIE_NAME=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/name" --with-decryption --query 'Parameter.Value' --output text)
+REFRESH_COOKIE_PATH=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/path" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/secure" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/same-site" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/domain" --with-decryption --query 'Parameter.Value' --output text)
@@ -325,20 +329,20 @@ fi
 # 컨테이너 실행
 docker run -d --restart=always --name community-app -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e SPRING_DATASOURCE_URL="$DB_URL" \
-  -e SPRING_DATASOURCE_USERNAME="$DB_USER" \
-  -e SPRING_DATASOURCE_PASSWORD="$DB_PASS" \
+  -e DB_URL="$DB_URL" \
+  -e DB_USERNAME="$DB_USER" \
+  -e DB_PASSWORD="$DB_PASS" \
   -e JWT_SECRET="$JWT_SECRET" \
   -e JWT_ACCESS_EXP_MS="$JWT_ACCESS_EXP_MS" \
   -e JWT_ISSUER="$JWT_ISSUER" \
   -e REFRESH_EXP_MS="$REFRESH_EXP_MS" \
+  -e REFRESH_COOKIE_NAME="$REFRESH_COOKIE_NAME" \
+  -e REFRESH_COOKIE_PATH="$REFRESH_COOKIE_PATH" \
   -e REFRESH_COOKIE_SECURE="$REFRESH_COOKIE_SECURE" \
   -e REFRESH_COOKIE_SAME_SITE="$REFRESH_COOKIE_SAME_SITE" \
   -e REFRESH_COOKIE_DOMAIN="$REFRESH_COOKIE_DOMAIN" \
-  -e APP_CORS_ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
-  -e APP_STORAGE_PROVIDER="local" \
-  -e APP_STORAGE_LOCAL_BASE_PATH="/app/uploads" \
-  -e APP_STORAGE_PUBLIC_BASE_URL="http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080/files" \
+  -e ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
+  -e PUBLIC_BASE_URL="http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080/files" \
   -e S3_BUCKET="$S3_BUCKET" \
   -v /opt/community-portfolio/uploads:/app/uploads \
   "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/community-portfolio:latest"
