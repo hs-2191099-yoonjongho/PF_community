@@ -304,7 +304,8 @@ DB_PORT="${hostport_and_path##*:}"
 # 포트가 없으면 기본 3306
 if [ "$DB_PORT" = "$hostport_and_path" ] || [ -z "$DB_PORT" ]; then DB_PORT="3306"; fi
 path_after_slash="${db_url_no_prefix#*/}"
-DB_NAME="${path_after_slash%%\?*}"
+# 쿼리스트링 제거: '?' 기준 첫 필드
+DB_NAME=$(printf '%s\n' "$path_after_slash" | cut -d'?' -f1)
 if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ]; then
   echo "Ensuring database '$DB_NAME' exists on $DB_HOST:$DB_PORT..."
   # mysql 클라이언트를 컨테이너로 일회성 실행 (로컬 설치 불필요)
