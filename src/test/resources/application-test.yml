@@ -1,13 +1,15 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:mysql://host.docker.internal:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci}
+    # localhost 사용으로 변경 (Docker 환경이 아닌 경우에도 일관된 실행 가능)
+    url: ${DB_URL:jdbc:mysql://localhost:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:1234}
     hikari:
       connection-init-sql: "SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci"
   jpa:
     hibernate:
-      ddl-auto: update
+      # 변경: update -> none (Flyway 일관성 유지)
+      ddl-auto: none
     properties:
       hibernate:
         format_sql: true
@@ -46,6 +48,7 @@ app:
     enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:false}
   storage:
     provider: local
-    public-base-url: http://localhost:8080/files
+    # 8082 포트로 통일 (docker-compose.yml과 일치)
+    public-base-url: http://localhost:8082/files
     local:
       base-path: uploads

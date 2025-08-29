@@ -1,0 +1,23 @@
+# Git & VCS
+.git
+.gitignore
+
+# IDE & OS
+.idea
+.vscode
+*.iml
+.DS_Store
+Thumbs.db
+
+# Build & caches
+.gradle
+build
+bin
+
+# Node
+node_modules
+dist
+
+# Local runtime data
+uploads
+.env

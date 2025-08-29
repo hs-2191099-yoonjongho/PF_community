@@ -1,6 +1,7 @@
 package com.example.community.web;
 
 import com.example.community.storage.Storage;
+import com.example.community.util.FileTypeValidator;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -40,8 +41,8 @@ public class FileController {
         if (file.isEmpty()) throw new IllegalArgumentException("파일이 비어있습니다");
         if (file.getSize() > 10 * 1024 * 1024) throw new IllegalArgumentException("10MB 이하만 업로드 가능합니다");
 
-        String ct = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
-        if (!ALLOWED.contains(ct)) throw new IllegalArgumentException("허용되지 않는 파일 형식: " + ct);
+    String ct = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
+    if (!FileTypeValidator.isAllowed(file, ALLOWED)) throw new IllegalArgumentException("허용되지 않는 파일 형식: " + ct);
 
         Storage.StoredFile stored = storage.store(file, safeDir(dir));
         return ResponseEntity.created(URI.create(stored.url()))

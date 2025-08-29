@@ -11,12 +11,24 @@ pipeline {
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip tests for faster builds (useful if DB not ready)')
+    string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
+    string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
+    string(name: 'EC2_INSTANCE_ID', defaultValue: '', description: 'EC2 인스턴스 ID')
+    string(name: 'AWS_CREDENTIALS_ID', defaultValue: 'aws-jenkins-accesskey', description: 'Jenkins에 설정된 AWS 자격증명 ID')
+    string(name: 'DEPLOY_ROLE_ARN', defaultValue: '', description: 'AWS IAM 배포 역할 ARN')
   }
 
   environment {
     TZ = 'Asia/Seoul'
-  // Use node-global Gradle cache to persist across workspaces
-  GRADLE_USER_HOME = "${JENKINS_HOME}/.gradle"
+    // Use node-global Gradle cache to persist across workspaces
+    GRADLE_USER_HOME = "${JENKINS_HOME}/.gradle"
+    // AWS ECR 환경 변수
+    AWS_REGION = "${params.AWS_REGION}"
+    ACCOUNT_ID = "${params.AWS_ACCOUNT_ID}"
+    ECR_REPO = "${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/community-portfolio"
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+    EC2_INSTANCE_ID = "${params.EC2_INSTANCE_ID}"
+    DEPLOY_ROLE_ARN = "${params.DEPLOY_ROLE_ARN}"
   }
 
   stages {
@@ -59,12 +71,79 @@ pipeline {
       when { expression { return !params.SKIP_TESTS } }
       steps {
         junit allowEmptyResults: true, testResults: 'build/test-results/test/**/*.xml'
+  archiveArtifacts allowEmptyArchive: true, artifacts: 'build/reports/tests/test/**'
       }
     }
 
     stage('Archive') {
       steps {
         archiveArtifacts artifacts: 'build/libs/*.jar', fingerprint: true, onlyIfSuccessful: true
+      }
+    }
+    
+    stage('AssumeRole') {
+      when { 
+        expression { 
+          return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim()
+        }
+      }
+      steps {
+        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${params.AWS_CREDENTIALS_ID}"]]) {
+          sh '''
+            CREDS=$(aws sts assume-role \
+              --role-arn ${DEPLOY_ROLE_ARN} \
+              --role-session-name jenkins-deploy \
+              --duration-seconds 3600)
+
+            export AWS_ACCESS_KEY_ID=$(echo $CREDS | jq -r .Credentials.AccessKeyId)
+            export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | jq -r .Credentials.SecretAccessKey)
+            export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r .Credentials.SessionToken)
+            export AWS_REGION=${AWS_REGION}
+            printenv | grep ^AWS_ > aws_env_export
+          '''
+        }
+      }
+    }
+    
+    stage('Build & Push Docker Image') {
+      when { 
+        expression { 
+          return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim()
+        }
+      }
+      steps {
+        sh '''
+          source aws_env_export
+          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
+          
+          docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+          docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
+          
+          docker push ${ECR_REPO}:${IMAGE_TAG}
+          docker push ${ECR_REPO}:latest
+        '''
+      }
+    }
+    
+    stage('Deploy to EC2') {
+      when { 
+        expression { 
+          return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim()
+        }
+      }
+      steps {
+        sh '''
+          source aws_env_export
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "${EC2_INSTANCE_ID}" \
+            --parameters commands="cd /opt/community-portfolio && \
+                                  aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO} && \
+                                  docker compose pull app && \
+                                  docker compose up -d app" \
+            --region ${AWS_REGION} \
+            --comment "Deploy community-portfolio app"
+        '''
       }
     }
   }
@@ -82,10 +161,10 @@ pipeline {
       }
     }
     failure {
-      echo 'Build failed. Check logs and test reports.'
+      echo 'Build or deployment failed. Check logs and test reports.'
     }
     success {
-      echo 'Build succeeded. Artifacts archived from build/libs.'
+      echo 'Build and deployment succeeded. Application is now running on EC2.'
     }
   }
 }
