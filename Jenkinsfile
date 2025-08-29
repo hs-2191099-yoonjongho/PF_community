@@ -41,7 +41,7 @@ pipeline {
           }
           checkout([
             $class: 'GitSCM',
-            branches: [[name: '*/branch(v4)']],                 // 괄호가 있는 브랜치명은 이 패턴이 안전
+            branches: [[name: '*/branch(v5)']],                 // 괄호가 있는 브랜치명은 이 패턴이 안전
             userRemoteConfigs: [remote],
             extensions: [[
               $class: 'CloneOption', shallow: true, depth: 1, noTags: true, timeout: 20
