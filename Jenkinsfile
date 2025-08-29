@@ -121,7 +121,7 @@ pipeline {
       }
       steps {
         sh '''
-          source aws_env_export
+          . ./aws_env_export
           aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
           
           docker build -t ${ECR_REPO}:${IMAGE_TAG} .
@@ -141,7 +141,7 @@ pipeline {
       }
       steps {
         sh '''
-          source aws_env_export
+          . ./aws_env_export
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${EC2_INSTANCE_ID}" \
