@@ -97,39 +97,39 @@ pipeline {
       }
       steps {
         withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId:'aws-jenkins-accesskey']]) {
-          sh """
+          sh '''
             set -e
             
-            # AWS CLI에서 값 추출 (sh 호환 방식)
-            AK=\$(aws sts assume-role \\
-              --role-arn ${params.DEPLOY_ROLE_ARN} \\
-              --role-session-name jenkins-deploy \\
-              --duration-seconds 3600 \\
-              --query 'Credentials.AccessKeyId' \\
+            # 임시 변수로 저장 (로그에 출력 최소화)
+            AK=$(aws sts assume-role \
+              --role-arn ${DEPLOY_ROLE_ARN} \
+              --role-session-name jenkins-deploy \
+              --duration-seconds 3600 \
+              --query 'Credentials.AccessKeyId' \
               --output text)
               
-            SK=\$(aws sts assume-role \\
-              --role-arn ${params.DEPLOY_ROLE_ARN} \\
-              --role-session-name jenkins-deploy \\
-              --duration-seconds 3600 \\
-              --query 'Credentials.SecretAccessKey' \\
+            SK=$(aws sts assume-role \
+              --role-arn ${DEPLOY_ROLE_ARN} \
+              --role-session-name jenkins-deploy \
+              --duration-seconds 3600 \
+              --query 'Credentials.SecretAccessKey' \
               --output text)
               
-            ST=\$(aws sts assume-role \\
-              --role-arn ${params.DEPLOY_ROLE_ARN} \\
-              --role-session-name jenkins-deploy \\
-              --duration-seconds 3600 \\
-              --query 'Credentials.SessionToken' \\
+            ST=$(aws sts assume-role \
+              --role-arn ${DEPLOY_ROLE_ARN} \
+              --role-session-name jenkins-deploy \
+              --duration-seconds 3600 \
+              --query 'Credentials.SessionToken' \
               --output text)
 
-            # 다음 스테이지에서 불러올 export 파일 생성 (로그에 값 안 찍힘)
-            cat > aws_env_export <<EOF
-export AWS_ACCESS_KEY_ID=\$AK
-export AWS_SECRET_ACCESS_KEY=\$SK
-export AWS_SESSION_TOKEN=\$ST
-export AWS_DEFAULT_REGION=${params.AWS_REGION}
+            # 자격 증명 파일 생성 (쉘 안전하게)
+            cat > aws_env_export << EOF
+export AWS_ACCESS_KEY_ID=$AK
+export AWS_SECRET_ACCESS_KEY=$SK
+export AWS_SESSION_TOKEN=$ST
+export AWS_DEFAULT_REGION=${AWS_REGION}
 EOF
-          """
+          '''
         }
       }
     }
@@ -141,23 +141,26 @@ EOF
         }
       }
       steps {
-        sh """
+        sh '''
           set -e
           . ./aws_env_export
-
-          # 로그인 대상은 '레지스트리' 도메인 (리포지토리 X)
-          aws ecr get-login-password --region ${params.AWS_REGION} \\
-            | docker login --username AWS --password-stdin \\
-              ${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com
-
-          REPO=${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/community-portfolio
-          SHA=\$(git rev-parse --short HEAD)
-
-          docker build -t \$REPO:latest -t \$REPO:\$SHA .
-          docker push \$REPO:latest
-          docker push \$REPO:\$SHA
-          echo "Pushed tags: latest, \$SHA"
-        """
+          
+          # 자격 증명 확인
+          aws sts get-caller-identity
+          
+          # 레지스트리 로그인
+          aws ecr get-login-password --region ${AWS_REGION} | \
+            docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+          
+          # 이미지 빌드 및 태그
+          REPO=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio
+          SHA=$(git rev-parse --short HEAD)
+          
+          docker build -t $REPO:latest -t $REPO:$SHA .
+          docker push $REPO:latest
+          docker push $REPO:$SHA
+          echo "Pushed tags: latest, $SHA"
+        '''
       }
     }
     
@@ -168,22 +171,24 @@ EOF
         }
       }
       steps {
-        sh """
+        sh '''
           set -e
           . ./aws_env_export
           
-          REPO=${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com/community-portfolio
+          # 자격 증명 확인
+          aws sts get-caller-identity
           
-          aws ssm send-command \\
-            --document-name "AWS-RunShellScript" \\
-            --instance-ids "${params.EC2_INSTANCE_ID}" \\
-            --parameters commands="cd /opt/community-portfolio && \\
-                                  aws ecr get-login-password --region ${params.AWS_REGION} | docker login --username AWS --password-stdin ${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.AWS_REGION}.amazonaws.com && \\
-                                  docker compose pull app && \\
-                                  docker compose up -d app" \\
-            --region ${params.AWS_REGION} \\
+          # EC2 배포
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "${EC2_INSTANCE_ID}" \
+            --parameters commands="cd /opt/community-portfolio && \
+                                 aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com && \
+                                 docker compose pull app && \
+                                 docker compose up -d app" \
+            --region ${AWS_REGION} \
             --comment "Deploy community-portfolio app"
-        """
+        '''
       }
     }
   }
