@@ -333,8 +333,9 @@ docker run -d --restart=always --name community-app -p 8080:8080 \
   -e REFRESH_COOKIE_SAME_SITE="$REFRESH_COOKIE_SAME_SITE" \
   -e REFRESH_COOKIE_DOMAIN="$REFRESH_COOKIE_DOMAIN" \
   -e APP_CORS_ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
+  -e APP_STORAGE_PROVIDER="local" \
   -e APP_STORAGE_LOCAL_BASE_PATH="/app/uploads" \
-  -e PUBLIC_BASE_URL="http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080/files" \
+  -e APP_STORAGE_PUBLIC_BASE_URL="http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080/files" \
   -e S3_BUCKET="$S3_BUCKET" \
   -v /opt/community-portfolio/uploads:/app/uploads \
   "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/community-portfolio:latest"
