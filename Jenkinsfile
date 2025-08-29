@@ -295,19 +295,25 @@ ALLOWED_ORIGINS=$(aws ssm get-parameter --name "$SSM_PREFIX/allowed-origins" --w
 S3_BUCKET=$(aws ssm get-parameter --name "$SSM_PREFIX/s3/bucket" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
 
 # 데이터베이스 존재 보장 (최초 배포 대비)
-# DB_URL 예: jdbc:mysql://host:3306/board?param=...
-DB_HOST_PORT=$(echo "$DB_URL" | sed -E 's#^jdbc:mysql://([^/]+)/.*#\1#')
-DB_HOST=$(echo "$DB_HOST_PORT" | cut -d: -f1)
-DB_PORT=$(echo "$DB_HOST_PORT" | cut -d: -f2)
-DB_PORT=${DB_PORT:-3306}
-DB_NAME=$(echo "$DB_URL" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\1#')
+# JDBC URL 파싱은 bash 문자열 연산으로 안전하게 처리
+# 예: jdbc:mysql://host:3306/board?param=...
+db_url_no_prefix="${DB_URL#jdbc:mysql://}"
+hostport_and_path="${db_url_no_prefix%%/*}"
+DB_HOST="${hostport_and_path%%:*}"
+DB_PORT="${hostport_and_path##*:}"
+# 포트가 없으면 기본 3306
+if [ "$DB_PORT" = "$hostport_and_path" ] || [ -z "$DB_PORT" ]; then DB_PORT="3306"; fi
+path_after_slash="${db_url_no_prefix#*/}"
+DB_NAME="${path_after_slash%%\?*}"
 if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ]; then
   echo "Ensuring database '$DB_NAME' exists on $DB_HOST:$DB_PORT..."
   # mysql 클라이언트를 컨테이너로 일회성 실행 (로컬 설치 불필요)
   docker run --rm mysql:8 \
     mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" \
       -e "CREATE DATABASE IF NOT EXISTS $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" \
-    || echo "WARN: Could not ensure database exists (non-fatal)."
+  || echo "WARN: Could not ensure database exists (non-fatal)."
+else
+  echo "WARN: Could not parse DB URL: $DB_URL"
 fi
 
 # 컨테이너 실행
