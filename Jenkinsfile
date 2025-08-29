@@ -294,6 +294,22 @@ REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie
 ALLOWED_ORIGINS=$(aws ssm get-parameter --name "$SSM_PREFIX/allowed-origins" --with-decryption --query 'Parameter.Value' --output text)
 S3_BUCKET=$(aws ssm get-parameter --name "$SSM_PREFIX/s3/bucket" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
 
+# 데이터베이스 존재 보장 (최초 배포 대비)
+# DB_URL 예: jdbc:mysql://host:3306/board?param=...
+DB_HOST_PORT=$(echo "$DB_URL" | sed -E 's#^jdbc:mysql://([^/]+)/.*#\1#')
+DB_HOST=$(echo "$DB_HOST_PORT" | cut -d: -f1)
+DB_PORT=$(echo "$DB_HOST_PORT" | cut -d: -f2)
+DB_PORT=${DB_PORT:-3306}
+DB_NAME=$(echo "$DB_URL" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\1#')
+if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ]; then
+  echo "Ensuring database '$DB_NAME' exists on $DB_HOST:$DB_PORT..."
+  # mysql 클라이언트를 컨테이너로 일회성 실행 (로컬 설치 불필요)
+  docker run --rm mysql:8 \
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" \
+      -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" \
+    || echo "WARN: Could not ensure database exists (non-fatal)."
+fi
+
 # 컨테이너 실행
 docker run -d --restart=always --name community-app -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
