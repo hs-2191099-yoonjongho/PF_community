@@ -217,7 +217,7 @@ EOF
 {
   "commands": [
     "mkdir -p /opt/community-portfolio",
-    "echo \\"${COMPOSE_B64}\\" | base64 -d > /opt/community-portfolio/docker-compose.yml",
+  "echo '${COMPOSE_B64}' | base64 -d > /opt/community-portfolio/docker-compose.yml",
     "ls -la /opt/community-portfolio"
   ]
 }
@@ -328,7 +328,7 @@ EOS
 {
   "commands": [
     "mkdir -p /opt/community-portfolio",
-    "echo \"${DEPLOY_B64}\" | base64 -d > /opt/community-portfolio/deploy.sh",
+  "echo '${DEPLOY_B64}' | base64 -d > /opt/community-portfolio/deploy.sh",
     "chmod +x /opt/community-portfolio/deploy.sh",
     "/opt/community-portfolio/deploy.sh"
   ]
