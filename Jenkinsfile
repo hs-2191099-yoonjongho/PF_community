@@ -306,7 +306,7 @@ if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ]; then
   # mysql 클라이언트를 컨테이너로 일회성 실행 (로컬 설치 불필요)
   docker run --rm mysql:8 \
     mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" \
-      -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" \
+      -e "CREATE DATABASE IF NOT EXISTS $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" \
     || echo "WARN: Could not ensure database exists (non-fatal)."
 fi
 
