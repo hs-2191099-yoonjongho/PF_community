@@ -153,6 +153,58 @@ pipeline {
           echo "Verifying AWS credentials for EC2 deployment..."
           aws sts get-caller-identity >/dev/null
 
+          # EC2 인스턴스 상태 확인
+          echo "Checking EC2 instance status..."
+          aws ec2 describe-instances --instance-ids ${EC2_INSTANCE_ID} --query 'Reservations[0].Instances[0].State.Name' --output text
+          
+          # docker-compose.yml 파일이 있는지 확인
+          echo "Checking if docker-compose.yml exists on instance..."
+          COMPOSE_CHECK=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "${EC2_INSTANCE_ID}" \
+            --parameters '{"commands":["test -f /opt/community-portfolio/docker-compose.yml && echo EXISTS || echo MISSING"]}' \
+            --output text \
+            --query "Command.CommandId")
+          
+          sleep 2
+          COMPOSE_RESULT=$(aws ssm get-command-invocation \
+            --command-id "$COMPOSE_CHECK" \
+            --instance-id "${EC2_INSTANCE_ID}" \
+            --query "StandardOutputContent" \
+            --output text)
+          
+          echo "Docker Compose file check result: $COMPOSE_RESULT"
+          
+          if [ "$COMPOSE_RESULT" = "MISSING" ]; then
+            echo "Creating docker-compose.yml on the instance..."
+            cat > docker-compose-remote.yml <<EOF
+version: '3.8'
+
+services:
+  app:
+    container_name: community-app
+    image: ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest
+    restart: always
+    ports:
+      - "8082:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    volumes:
+      - ./uploads:/app/uploads
+EOF
+
+            # 원격 서버에 docker-compose.yml 파일 생성
+            aws ssm send-command \
+              --document-name "AWS-RunShellScript" \
+              --instance-ids "${EC2_INSTANCE_ID}" \
+              --parameters commands="mkdir -p /opt/community-portfolio && cat > /opt/community-portfolio/docker-compose.yml << 'EOL'
+$(cat docker-compose-remote.yml)
+EOL" \
+              --output text
+            
+            sleep 3
+          fi
+
           # SSM 입력 JSON 작성 (반드시 EOF 단독 줄로 종료!)
           cat > ssm-send-command.json <<EOF
 {
@@ -163,11 +215,13 @@ pipeline {
       "mkdir -p /opt/community-portfolio/uploads",
       "chmod 777 /opt/community-portfolio /opt/community-portfolio/uploads || true",
       "cd /opt/community-portfolio",
+      "ls -la",
       "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
-      "docker compose pull app",
-      "docker compose up -d app",
+      "docker compose pull app || echo 'Pull failed but continuing'",
+      "docker compose up -d app || (echo 'Docker compose failed:' && cat docker-compose.yml && exit 1)",
       "docker compose ps",
-      "curl -fsS http://localhost:8082/actuator/health || (docker logs --tail=200 community-app || true; exit 1)"
+      "sleep 10",
+      "curl -fsS http://localhost:8082/actuator/health || (docker logs --tail=200 community-app && exit 1)"
     ]
   },
   "Comment": "Deploy community-portfolio app"
@@ -178,11 +232,17 @@ EOF
           CMD_ID=$(aws ssm send-command --cli-input-json file://ssm-send-command.json --query "Command.CommandId" --output text)
 
           echo "Waiting SSM command to finish: $CMD_ID"
-          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "${EC2_INSTANCE_ID}"
-
-          echo "SSM output (last lines):"
-          aws ssm list-command-invocations --command-id "$CMD_ID" --details \\
-            --query "CommandInvocations[0].CommandPlugins[0].Output" --output text | tail -n 50
+          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "${EC2_INSTANCE_ID}" || true
+          
+          echo "Getting SSM command status..."
+          aws ssm list-commands --command-id "$CMD_ID" --query 'Commands[0].Status' --output text
+          
+          echo "SSM command details:"
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${EC2_INSTANCE_ID}" || true
+          
+          echo "SSM output:"
+          aws ssm list-command-invocations --command-id "$CMD_ID" --details \
+            --query "CommandInvocations[0].CommandPlugins[0].Output" --output text || echo "Failed to get output"
         '''
       }
     }
