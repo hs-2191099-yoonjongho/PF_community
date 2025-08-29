@@ -309,9 +309,30 @@ docker run -d --restart=always --name community-app -p 8080:8080 \
   -v /opt/community-portfolio/uploads:/app/uploads \
   "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/community-portfolio:latest"
 
-echo "Container started. Waiting for health..."
-sleep 8
-curl -fsS http://localhost:8080/actuator/health || (docker logs community-app && exit 1)
+echo "Container started. Waiting for health (up to ~90s)..."
+
+# Retry health check up to 30 times (3s interval)
+for i in $(seq 1 30); do
+  # If container died, fail early with logs
+  if ! docker ps --format '{{.Names}}' | grep -q '^community-app$'; then
+    echo "Container is not running anymore. Showing logs..."
+    docker logs community-app || true
+    exit 1
+  fi
+
+  # Probe health endpoint
+  if curl -fsS http://localhost:8080/actuator/health | grep -q '"status"\s*:\s*"UP"'; then
+    echo "Health check passed."
+    exit 0
+  fi
+
+  echo "Health not ready yet ($i/30). Sleeping 3s..."
+  sleep 3
+done
+
+echo "Health check timed out. Showing logs..."
+docker logs community-app || true
+exit 1
 EOS
 
           # 2) 자리표시자 치환 (안전한 구분자 사용)
