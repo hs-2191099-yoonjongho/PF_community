@@ -320,8 +320,8 @@ for i in $(seq 1 30); do
     exit 1
   fi
 
-  # Probe health endpoint
-  if curl -fsS http://localhost:8080/actuator/health | grep -q '"status"\s*:\s*"UP"'; then
+            # Probe health endpoint
+            if curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
     echo "Health check passed."
     exit 0
   fi
