@@ -161,6 +161,7 @@ ${SSM_PREFIX}/db/url
 ${SSM_PREFIX}/db/user
 ${SSM_PREFIX}/db/pass
 ${SSM_PREFIX}/jwt/secret
+${SSM_PREFIX}/jwt/access-exp-ms
 ${SSM_PREFIX}/refresh/cookie/secure
 ${SSM_PREFIX}/refresh/cookie/same-site
 ${SSM_PREFIX}/refresh/cookie/domain
@@ -288,6 +289,7 @@ DB_URL=$(aws ssm get-parameter --name "$SSM_PREFIX/db/url" --with-decryption --q
 DB_USER=$(aws ssm get-parameter --name "$SSM_PREFIX/db/user" --with-decryption --query 'Parameter.Value' --output text)
 DB_PASS=$(aws ssm get-parameter --name "$SSM_PREFIX/db/pass" --with-decryption --query 'Parameter.Value' --output text)
 JWT_SECRET=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/secret" --with-decryption --query 'Parameter.Value' --output text)
+JWT_ACCESS_EXP_MS=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/access-exp-ms" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/secure" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/same-site" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/domain" --with-decryption --query 'Parameter.Value' --output text)
@@ -324,6 +326,7 @@ docker run -d --restart=always --name community-app -p 8080:8080 \
   -e SPRING_DATASOURCE_USERNAME="$DB_USER" \
   -e SPRING_DATASOURCE_PASSWORD="$DB_PASS" \
   -e JWT_SECRET="$JWT_SECRET" \
+  -e JWT_ACCESS_EXP_MS="$JWT_ACCESS_EXP_MS" \
   -e REFRESH_COOKIE_SECURE="$REFRESH_COOKIE_SECURE" \
   -e REFRESH_COOKIE_SAME_SITE="$REFRESH_COOKIE_SAME_SITE" \
   -e REFRESH_COOKIE_DOMAIN="$REFRESH_COOKIE_DOMAIN" \
