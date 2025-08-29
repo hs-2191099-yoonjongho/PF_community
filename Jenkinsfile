@@ -81,6 +81,14 @@ pipeline {
       }
     }
     
+    stage('Who am I') {
+      steps {
+        withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId:'aws-jenkins-accesskey']]) {
+          sh 'aws sts get-caller-identity'
+        }
+      }
+    }
+    
     stage('AssumeRole') {
       when { 
         expression { 
