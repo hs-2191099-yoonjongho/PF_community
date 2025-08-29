@@ -162,6 +162,7 @@ ${SSM_PREFIX}/db/user
 ${SSM_PREFIX}/db/pass
 ${SSM_PREFIX}/jwt/secret
 ${SSM_PREFIX}/jwt/access-exp-ms
+${SSM_PREFIX}/refresh/exp-ms
 ${SSM_PREFIX}/refresh/cookie/secure
 ${SSM_PREFIX}/refresh/cookie/same-site
 ${SSM_PREFIX}/refresh/cookie/domain
@@ -291,6 +292,7 @@ DB_PASS=$(aws ssm get-parameter --name "$SSM_PREFIX/db/pass" --with-decryption -
 JWT_SECRET=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/secret" --with-decryption --query 'Parameter.Value' --output text)
 JWT_ACCESS_EXP_MS=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/access-exp-ms" --with-decryption --query 'Parameter.Value' --output text)
 JWT_ISSUER=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/issuer" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "community-app")
+REFRESH_EXP_MS=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/exp-ms" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/secure" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/same-site" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/domain" --with-decryption --query 'Parameter.Value' --output text)
@@ -329,6 +331,7 @@ docker run -d --restart=always --name community-app -p 8080:8080 \
   -e JWT_SECRET="$JWT_SECRET" \
   -e JWT_ACCESS_EXP_MS="$JWT_ACCESS_EXP_MS" \
   -e JWT_ISSUER="$JWT_ISSUER" \
+  -e REFRESH_EXP_MS="$REFRESH_EXP_MS" \
   -e REFRESH_COOKIE_SECURE="$REFRESH_COOKIE_SECURE" \
   -e REFRESH_COOKIE_SAME_SITE="$REFRESH_COOKIE_SAME_SITE" \
   -e REFRESH_COOKIE_DOMAIN="$REFRESH_COOKIE_DOMAIN" \
