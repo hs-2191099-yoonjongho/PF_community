@@ -181,85 +181,122 @@ services:
       - ./uploads:/app/uploads
 EOF
 
-          # Base64로 인코딩하여 단일 라인으로 변환
-          echo "Converting docker-compose to base64..."
+          # docker-compose.yml 파일을 Base64로 인코딩
+          echo "Converting docker-compose.yml to base64..."
           if base64 --help 2>&1 | grep -q -- "-w"; then
+            # GNU base64 (Linux)
             COMPOSE_B64=$(base64 -w0 docker-compose-remote.yml)
           else
+            # BSD base64 (macOS)
             COMPOSE_B64=$(base64 docker-compose-remote.yml | tr -d '\\n')
           fi
 
-          # SSM 명령 파라미터 JSON 파일 생성
-          echo "Creating SSM parameter JSON file..."
-          cat > ssm-write-compose.json <<EOF
+          # 디렉토리 생성 및 파일 쓰기 명령을 위한 JSON 파일 생성
+          echo "Creating JSON file for SSM command..."
+          cat > ssm-params.json <<EOF
 {
   "commands": [
-    "set -e",
     "mkdir -p /opt/community-portfolio",
-    "echo ${COMPOSE_B64} | base64 -d > /opt/community-portfolio/docker-compose.yml"
+    "echo \\"${COMPOSE_B64}\\" | base64 -d > /opt/community-portfolio/docker-compose.yml",
+    "ls -la /opt/community-portfolio"
   ]
 }
 EOF
 
-          # docker-compose.yml 파일 생성을 위한 SSM 명령 실행
-          echo "Sending SSM command to write docker-compose.yml..."
-          COMPOSE_CMD_ID=$(aws ssm send-command \
+          # SSM 명령 실행
+          echo "Sending SSM command to create docker-compose.yml..."
+          WRITE_CMD_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${EC2_INSTANCE_ID}" \
-            --comment "Write compose file" \
-            --parameters file://ssm-write-compose.json \
-            --query "Command.CommandId" --output text)
+            --comment "Write docker-compose.yml" \
+            --parameters file://ssm-params.json \
+            --output text \
+            --query "Command.CommandId")
 
-          echo "Waiting for compose file creation to complete..."
+          echo "Waiting for file creation to complete (Command ID: $WRITE_CMD_ID)..."
           aws ssm wait command-executed \
-            --command-id "$COMPOSE_CMD_ID" --instance-id "${EC2_INSTANCE_ID}" || true
+            --command-id "$WRITE_CMD_ID" \
+            --instance-id "${EC2_INSTANCE_ID}" || echo "Wait command timed out, but continuing..."
 
-          # 배포 명령어 JSON 파일 생성
+          # 명령 결과 확인
+          echo "Checking file creation results..."
+          FILE_RESULT=$(aws ssm get-command-invocation \
+            --command-id "$WRITE_CMD_ID" \
+            --instance-id "${EC2_INSTANCE_ID}" \
+            --query "Status" \
+            --output text)
+            
+          echo "File creation status: $FILE_RESULT"
+          
+          if [ "$FILE_RESULT" != "Success" ]; then
+            echo "Error creating docker-compose.yml file:"
+            aws ssm get-command-invocation \
+              --command-id "$WRITE_CMD_ID" \
+              --instance-id "${EC2_INSTANCE_ID}" \
+              --query "StandardErrorContent" \
+              --output text
+            exit 1
+          fi
+
+          # 애플리케이션 배포 명령 JSON 생성
           echo "Creating deployment commands JSON..."
-          cat > ssm-deploy.json <<'EOF'
+          cat > deploy-params.json <<EOF
 {
   "commands": [
-    "set -e",
     "cd /opt/community-portfolio",
     "mkdir -p uploads",
-    "chmod 777 /opt/community-portfolio /opt/community-portfolio/uploads || true",
-    "ls -la",
-    "aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 950756301515.dkr.ecr.ap-northeast-2.amazonaws.com",
-    "docker compose pull app || echo 'Pull failed but continuing'",
-    "docker compose up -d app || (echo 'Docker compose failed:' && cat docker-compose.yml && exit 1)",
+    "chmod 777 uploads",
+    "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
+    "docker compose pull",
+    "docker compose up -d",
     "docker compose ps",
     "sleep 10",
-    "curl -fsS http://localhost:8082/actuator/health || (docker logs --tail=200 community-app && exit 1)"
+    "curl -fsS http://localhost:8082/actuator/health || (docker logs community-app && exit 1)"
   ]
 }
 EOF
 
           # 배포 실행
-          echo "Deploying via SSM and docker compose..."
+          echo "Deploying application via SSM..."
           DEPLOY_CMD_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${EC2_INSTANCE_ID}" \
             --comment "Deploy application" \
-            --parameters file://ssm-deploy.json \
-            --query "Command.CommandId" --output text)
+            --parameters file://deploy-params.json \
+            --output text \
+            --query "Command.CommandId")
 
-          echo "Waiting for deployment to complete: $DEPLOY_CMD_ID"
+          echo "Waiting for deployment to complete (Command ID: $DEPLOY_CMD_ID)..."
           aws ssm wait command-executed \
             --command-id "$DEPLOY_CMD_ID" \
-            --instance-id "${EC2_INSTANCE_ID}" || true
+            --instance-id "${EC2_INSTANCE_ID}" || echo "Wait command timed out, but continuing..."
           
-          echo "Getting deployment command status..."
-          aws ssm list-commands \
-            --command-id "$DEPLOY_CMD_ID" \
-            --query 'Commands[0].Status' \
-            --output text
-
-          echo "Deployment results:"
-          aws ssm get-command-invocation \
+          # 배포 결과 확인
+          echo "Checking deployment results..."
+          DEPLOY_RESULT=$(aws ssm get-command-invocation \
             --command-id "$DEPLOY_CMD_ID" \
             --instance-id "${EC2_INSTANCE_ID}" \
-            --query '{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}' \
-            --output json || echo "Failed to get deployment results"
+            --query "Status" \
+            --output text)
+            
+          echo "Deployment status: $DEPLOY_RESULT"
+          
+          if [ "$DEPLOY_RESULT" != "Success" ]; then
+            echo "ERROR: Deployment failed. Details:"
+            aws ssm get-command-invocation \
+              --command-id "$DEPLOY_CMD_ID" \
+              --instance-id "${EC2_INSTANCE_ID}" \
+              --query "{Error:StandardErrorContent, Output:StandardOutputContent}" \
+              --output json
+            exit 1
+          else
+            echo "Deployment succeeded! Application should be running at http://<EC2-PUBLIC-IP>:8082"
+            aws ssm get-command-invocation \
+              --command-id "$DEPLOY_CMD_ID" \
+              --instance-id "${EC2_INSTANCE_ID}" \
+              --query "StandardOutputContent" \
+              --output text
+          fi
         '''
       }
     }
