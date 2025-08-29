@@ -54,6 +54,7 @@ pipeline {
     stage('Prepare') {
       steps {
         sh 'chmod +x gradlew || true'
+        sh 'docker --version || echo "WARNING: Docker not available"'
       }
     }
 
@@ -96,89 +97,70 @@ pipeline {
         }
       }
       steps {
-        withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId:'aws-jenkins-accesskey']]) {
+        withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId: params.AWS_CREDENTIALS_ID]]) {
           sh '''
             set -e
-            
-            # 임시 변수로 저장 (로그에 출력 최소화)
-            AK=$(aws sts assume-role \
-              --role-arn ${DEPLOY_ROLE_ARN} \
-              --role-session-name jenkins-deploy \
-              --duration-seconds 3600 \
-              --query 'Credentials.AccessKeyId' \
-              --output text)
-              
-            SK=$(aws sts assume-role \
-              --role-arn ${DEPLOY_ROLE_ARN} \
-              --role-session-name jenkins-deploy \
-              --duration-seconds 3600 \
-              --query 'Credentials.SecretAccessKey' \
-              --output text)
-              
-            ST=$(aws sts assume-role \
-              --role-arn ${DEPLOY_ROLE_ARN} \
-              --role-session-name jenkins-deploy \
-              --duration-seconds 3600 \
-              --query 'Credentials.SessionToken' \
-              --output text)
 
-            # 자격 증명 파일 생성 (쉘 안전하게)
-            cat > aws_env_export << EOF
-export AWS_ACCESS_KEY_ID=$AK
-export AWS_SECRET_ACCESS_KEY=$SK
-export AWS_SESSION_TOKEN=$ST
-export AWS_DEFAULT_REGION=${AWS_REGION}
+            # 한 번의 호출에서 3개 값을 탭으로 구분해 받기
+            read AK SK ST <<EOF
+$(aws sts assume-role \\
+  --role-arn "${DEPLOY_ROLE_ARN}" \\
+  --role-session-name jenkins-deploy \\
+  --duration-seconds 3600 \\
+  --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \\
+  --output text)
 EOF
+
+            # env 파일로 저장 (로그에 값 노출 안 함)
+            {
+              echo "export AWS_ACCESS_KEY_ID=${AK}"
+              echo "export AWS_SECRET_ACCESS_KEY=${SK}"
+              echo "export AWS_SESSION_TOKEN=${ST}"
+              echo "export AWS_DEFAULT_REGION=${AWS_REGION}"
+            } > aws_env_export
+
+            # 민감값은 출력하지 않기
+            echo "Wrote temporary AWS creds to aws_env_export"
           '''
         }
       }
     }
     
     stage('Build & Push Docker Image') {
-      when { 
-        expression { 
-          return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim()
-        }
-      }
+      when { expression { return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim() } }
       steps {
         sh '''
           set -e
           . ./aws_env_export
-          
-          # 자격 증명 확인
+
+          echo "Validating temporary credentials..."
           aws sts get-caller-identity
-          
-          # 레지스트리 로그인
+
+          echo "Logging in to ECR..."
           aws ecr get-login-password --region ${AWS_REGION} | \
             docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-          
-          # 이미지 빌드 및 태그
+
           REPO=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio
           SHA=$(git rev-parse --short HEAD)
-          
+
           docker build -t $REPO:latest -t $REPO:$SHA .
           docker push $REPO:latest
           docker push $REPO:$SHA
-          echo "Pushed tags: latest, $SHA"
         '''
       }
     }
     
     stage('Deploy to EC2') {
-      when { 
-        expression { 
-          return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim()
-        }
-      }
+      when { expression { return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim() } }
       steps {
         sh '''
           set -e
           . ./aws_env_export
           
-          # 자격 증명 확인
+          echo "Verifying AWS credentials for EC2 deployment..."
           aws sts get-caller-identity
           
-          # EC2 배포
+          echo "Deploying to EC2 instance ${EC2_INSTANCE_ID}..."
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --instance-ids "${EC2_INSTANCE_ID}" \
