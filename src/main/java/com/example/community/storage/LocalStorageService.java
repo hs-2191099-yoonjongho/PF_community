@@ -11,7 +11,7 @@ import java.nio.file.*;
 import java.util.UUID;
 
 @Service
-@Profile({"default","local"}) // prod에선 s3로 스위치
+@Profile({"default","local","prod"}) // prod에서도 local storage 사용
 @RequiredArgsConstructor
 public class LocalStorageService implements Storage {
 
