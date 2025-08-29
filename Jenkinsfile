@@ -99,13 +99,27 @@ pipeline {
         withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId:'aws-jenkins-accesskey']]) {
           sh """
             set -e
-
-            # jq 없이 바로 3개 값만 추출
-            read AK SK ST <<< \$(aws sts assume-role \\
+            
+            # AWS CLI에서 값 추출 (sh 호환 방식)
+            AK=\$(aws sts assume-role \\
               --role-arn ${params.DEPLOY_ROLE_ARN} \\
               --role-session-name jenkins-deploy \\
               --duration-seconds 3600 \\
-              --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \\
+              --query 'Credentials.AccessKeyId' \\
+              --output text)
+              
+            SK=\$(aws sts assume-role \\
+              --role-arn ${params.DEPLOY_ROLE_ARN} \\
+              --role-session-name jenkins-deploy \\
+              --duration-seconds 3600 \\
+              --query 'Credentials.SecretAccessKey' \\
+              --output text)
+              
+            ST=\$(aws sts assume-role \\
+              --role-arn ${params.DEPLOY_ROLE_ARN} \\
+              --role-session-name jenkins-deploy \\
+              --duration-seconds 3600 \\
+              --query 'Credentials.SessionToken' \\
               --output text)
 
             # 다음 스테이지에서 불러올 export 파일 생성 (로그에 값 안 찍힘)
