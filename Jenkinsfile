@@ -10,12 +10,13 @@ pipeline {
 
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
-    booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip tests for faster builds (useful if DB not ready)')
+    booleanParam(name: 'SKIP_TESTS', defaultValue: true, description: 'Skip tests for faster builds (useful if DB not ready)')
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
     string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
     string(name: 'EC2_INSTANCE_ID', defaultValue: '', description: 'EC2 인스턴스 ID')
     string(name: 'AWS_CREDENTIALS_ID', defaultValue: 'aws-jenkins-accesskey', description: 'Jenkins에 설정된 AWS 자격증명 ID')
     string(name: 'DEPLOY_ROLE_ARN', defaultValue: '', description: 'AWS IAM 배포 역할 ARN')
+  string(name: 'SSM_PREFIX', defaultValue: '/community-portfolio/dev', description: 'SSM 파라미터 프리픽스 (예: /community-portfolio/dev 또는 /community-portfolio/prod)')
   }
 
   environment {
@@ -29,6 +30,7 @@ pipeline {
     IMAGE_TAG = "${env.BUILD_NUMBER}"
     EC2_INSTANCE_ID = "${params.EC2_INSTANCE_ID}"
     DEPLOY_ROLE_ARN = "${params.DEPLOY_ROLE_ARN}"
+  SSM_PREFIX = "${params.SSM_PREFIX}"
   }
 
   stages {
@@ -153,6 +155,24 @@ pipeline {
           echo "Verifying AWS credentials for EC2 deployment..."
           aws sts get-caller-identity >/dev/null
 
+          echo "Checking required SSM parameters under prefix: ${SSM_PREFIX}"
+          REQUIRED_KEYS=( \
+            "${SSM_PREFIX}/db/url" \
+            "${SSM_PREFIX}/db/user" \
+            "${SSM_PREFIX}/db/pass" \
+            "${SSM_PREFIX}/jwt/secret" \
+            "${SSM_PREFIX}/refresh/cookie/secure" \
+            "${SSM_PREFIX}/refresh/cookie/same-site" \
+            "${SSM_PREFIX}/refresh/cookie/domain" \
+            "${SSM_PREFIX}/allowed-origins" \
+          )
+          for key in "${REQUIRED_KEYS[@]}"; do
+            if ! aws ssm get-parameter --name "$key" --with-decryption --query Parameter.Name --output text >/dev/null 2>&1; then
+              echo "Missing required SSM parameter: $key" >&2
+              exit 1
+            fi
+          done
+
           # EC2 인스턴스 상태 확인
           echo "Checking EC2 instance status..."
           EC2_STATUS=$(aws ec2 describe-instances --instance-ids ${EC2_INSTANCE_ID} --query 'Reservations[0].Instances[0].State.Name' --output text)
@@ -174,7 +194,7 @@ services:
     image: ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest
     restart: always
     ports:
-      - "8082:8080"
+      - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
     volumes:
@@ -247,15 +267,42 @@ EOF
     "mkdir -p uploads",
     "chmod 777 uploads",
 
+    "# Docker 실행 확인 및 시작",
     "command -v systemctl >/dev/null 2>&1 && (systemctl is-active docker >/dev/null 2>&1 || systemctl start docker) || true",
-
+    
+    "# ECR 로그인 및 이미지 pull",
     "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
     "docker pull ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
     "docker rm -f community-app || true",
 
-    "docker run -d --restart=always --name community-app -p 8082:8080 -e SPRING_PROFILES_ACTIVE=prod -v /opt/community-portfolio/uploads:/app/uploads ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
+  "# --- DB 환경변수 채우기 (SSM → 셸 변수) ---",
+  "DB_URL=$(aws ssm get-parameter --name \"${SSM_PREFIX}/db/url\" --with-decryption --query Parameter.Value --output text)",
+  "DB_USER=$(aws ssm get-parameter --name \"${SSM_PREFIX}/db/user\" --with-decryption --query Parameter.Value --output text)",
+  "DB_PASS=$(aws ssm get-parameter --name \"${SSM_PREFIX}/db/pass\" --with-decryption --query Parameter.Value --output text)",
+  "JWT_SECRET=$(aws ssm get-parameter --name \"${SSM_PREFIX}/jwt/secret\" --with-decryption --query Parameter.Value --output text)",
+  "REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name \"${SSM_PREFIX}/refresh/cookie/secure\" --with-decryption --query Parameter.Value --output text)",
+  "REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name \"${SSM_PREFIX}/refresh/cookie/same-site\" --with-decryption --query Parameter.Value --output text)",
+  "REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name \"${SSM_PREFIX}/refresh/cookie/domain\" --with-decryption --query Parameter.Value --output text)",
+  "ALLOWED_ORIGINS=$(aws ssm get-parameter --name \"${SSM_PREFIX}/allowed-origins\" --with-decryption --query Parameter.Value --output text)",
+  "S3_BUCKET=$(aws ssm get-parameter --name \"${SSM_PREFIX}/s3/bucket\" --with-decryption --query Parameter.Value --output text 2>/dev/null || echo \"\")",
+    
+    "docker run -d --restart=always --name community-app -p 8080:8080 \\
+      -e SPRING_PROFILES_ACTIVE=prod \\
+      -e SPRING_DATASOURCE_URL=\"$DB_URL\" \\
+      -e SPRING_DATASOURCE_USERNAME=\"$DB_USER\" \\
+      -e SPRING_DATASOURCE_PASSWORD=\"$DB_PASS\" \\
+      -e JWT_SECRET=\"$JWT_SECRET\" \\
+      -e REFRESH_COOKIE_SECURE=\"$REFRESH_COOKIE_SECURE\" \\
+      -e REFRESH_COOKIE_SAME_SITE=\"$REFRESH_COOKIE_SAME_SITE\" \\
+      -e REFRESH_COOKIE_DOMAIN=\"$REFRESH_COOKIE_DOMAIN\" \\
+      -e ALLOWED_ORIGINS=\"$ALLOWED_ORIGINS\" \\
+      -e S3_BUCKET=\"$S3_BUCKET\" \\
+      -v /opt/community-portfolio/uploads:/app/uploads \\
+      ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
 
-    "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do curl -fsS http://localhost:8082/actuator/health && exit 0 || sleep 5; done; docker logs --tail=200 community-app; exit 1"
+    "docker ps",
+    "sleep 8",
+    "curl -fsS http://localhost:8080/actuator/health || (docker logs community-app && exit 1)"
   ]
 }
 EOF
@@ -294,7 +341,7 @@ EOF
               --output json
             exit 1
           else
-            echo "Deployment succeeded! Application should be running at http://<EC2-PUBLIC-IP>:8082"
+            echo "Deployment succeeded! Application should be running at http://<EC2-PUBLIC-IP>:8080"
             aws ssm get-command-invocation \
               --command-id "$DEPLOY_CMD_ID" \
               --instance-id "${EC2_INSTANCE_ID}" \

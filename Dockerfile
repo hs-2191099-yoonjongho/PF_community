@@ -10,7 +10,7 @@ RUN chmod +x gradlew && ./gradlew --no-daemon clean bootJar -x test
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /workspace/build/libs/*.jar /app/app.jar
-EXPOSE 8082
+EXPOSE 8080
 ENV TZ=Asia/Seoul
 RUN apt-get update \
 		&& apt-get install -y --no-install-recommends curl ca-certificates \
@@ -20,5 +20,5 @@ RUN apt-get update \
 		&& chown -R appuser:appuser /app
 USER appuser
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
-	CMD curl -fsS http://localhost:8082/actuator/health | grep -q '"status":"UP"' || exit 1
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+	CMD curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"' || exit 1
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

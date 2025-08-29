@@ -23,7 +23,10 @@ bin/
 ### Spring Boot / Config ###
 # Only ignore main resources configs; allow test resources configs to be tracked
 /src/main/resources/application.yml
-/src/main/resources/application-*.yml
+/src/main/resources/application-dev.yml
+/src/main/resources/application-local.yml
+# Allow prod config template with placeholders
+!/src/main/resources/application-prod.yml
 .env
 .env.*
 
@@ -87,6 +90,11 @@ uploads/
 
 ### IntelliJ Run configs ###
 .run/
+
+# Local helper scripts (do not commit real secrets)
+add-aws-parameters.sh
+*.secrets.sh
+scripts/*.secrets.ps1
 
 # Keep Gradle Wrapper in VCS (must be after *.jar ignore above)
 !gradle/wrapper/gradle-wrapper.jar

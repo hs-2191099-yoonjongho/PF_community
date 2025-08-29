@@ -4,7 +4,7 @@ services:
     container_name: community-app
 
     ports:
-      - "${SERVER_PORT:-8082}:${SERVER_PORT:-8082}"
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
 
     environment:
       SPRING_PROFILES_ACTIVE: "prod"
@@ -17,7 +17,7 @@ services:
       REFRESH_COOKIE_SAME_SITE: "${REFRESH_COOKIE_SAME_SITE}"
       REFRESH_COOKIE_DOMAIN: "${REFRESH_COOKIE_DOMAIN}"
       S3_BUCKET: "${S3_BUCKET}"
-      SERVER_PORT: "${SERVER_PORT:-8082}"
+      SERVER_PORT: "${SERVER_PORT:-8080}"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseContainerSupport"
 
     volumes:
@@ -33,7 +33,7 @@ services:
     read_only: true
 
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:${SERVER_PORT:-8082}/actuator/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:${SERVER_PORT:-8080}/actuator/health"]
       interval: 30s
       timeout: 5s
       retries: 5

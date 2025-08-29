@@ -48,7 +48,7 @@ app:
     enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:false}
   storage:
     provider: local
-    # 8082 포트로 통일 (docker-compose.yml과 일치)
-    public-base-url: http://localhost:8082/files
+    # 8080 포트로 통일 (docker-compose.yml과 일치)
+    public-base-url: http://localhost:8080/files
     local:
       base-path: uploads
