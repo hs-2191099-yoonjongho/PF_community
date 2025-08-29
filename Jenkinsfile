@@ -246,12 +246,16 @@ EOF
     "cd /opt/community-portfolio",
     "mkdir -p uploads",
     "chmod 777 uploads",
+
+    "command -v systemctl >/dev/null 2>&1 && (systemctl is-active docker >/dev/null 2>&1 || systemctl start docker) || true",
+
     "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
-    "docker compose pull",
-    "docker compose up -d",
-    "docker compose ps",
-    "sleep 10",
-    "curl -fsS http://localhost:8082/actuator/health || (docker logs community-app && exit 1)"
+    "docker pull ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
+    "docker rm -f community-app || true",
+
+    "docker run -d --restart=always --name community-app -p 8082:8080 -e SPRING_PROFILES_ACTIVE=prod -v /opt/community-portfolio/uploads:/app/uploads ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
+
+    "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do curl -fsS http://localhost:8082/actuator/health && exit 0 || sleep 5; done; docker logs --tail=200 community-app; exit 1"
   ]
 }
 EOF
