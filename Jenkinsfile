@@ -365,37 +365,47 @@ EOF
             --output text \
             --query "Command.CommandId")
 
-          echo "Waiting for deployment to complete (Command ID: $DEPLOY_CMD_ID)..."
-          aws ssm wait command-executed \
-            --command-id "$DEPLOY_CMD_ID" \
-            --instance-id "${EC2_INSTANCE_ID}" || echo "Wait command timed out, but continuing..."
+          echo "Polling deployment status (Command ID: $DEPLOY_CMD_ID)..."
+          POLL_MAX=120   # 최대 약 10분 (120 * 5초)
+          POLL_INTERVAL=5
+          DEPLOY_RESULT="Pending"
+          for i in $(seq 1 $POLL_MAX); do
+            # 간헐적 오류(InvocationDoesNotExist 등) 무시하고 재시도
+            DEPLOY_RESULT=$(aws ssm get-command-invocation \
+              --command-id "$DEPLOY_CMD_ID" \
+              --instance-id "${EC2_INSTANCE_ID}" \
+              --query "Status" \
+              --output text 2>/dev/null || echo "Unknown")
+            echo "Deployment status: $DEPLOY_RESULT ($i/$POLL_MAX)"
 
-          # 배포 결과 확인
-          echo "Checking deployment results..."
-          DEPLOY_RESULT=$(aws ssm get-command-invocation \
-            --command-id "$DEPLOY_CMD_ID" \
-            --instance-id "${EC2_INSTANCE_ID}" \
-            --query "Status" \
-            --output text)
-
-          echo "Deployment status: $DEPLOY_RESULT"
+            case "$DEPLOY_RESULT" in
+              Success)
+                break ;;
+              Failed|Cancelled|TimedOut)
+                break ;;
+              InProgress|Pending|Delayed|Cancelling|Unknown)
+                sleep $POLL_INTERVAL ;;
+              *)
+                sleep $POLL_INTERVAL ;;
+            esac
+          done
 
           if [ "$DEPLOY_RESULT" != "Success" ]; then
-            echo "ERROR: Deployment failed. Details:"
+            echo "ERROR: Deployment did not succeed (final status: $DEPLOY_RESULT). Dumping logs..."
             aws ssm get-command-invocation \
               --command-id "$DEPLOY_CMD_ID" \
               --instance-id "${EC2_INSTANCE_ID}" \
               --query "{Error:StandardErrorContent, Output:StandardOutputContent}" \
-              --output json
+              --output json || true
             exit 1
-          else
-            echo "Deployment succeeded! Application should be running at http://<EC2-PUBLIC-IP>:8080"
-            aws ssm get-command-invocation \
-              --command-id "$DEPLOY_CMD_ID" \
-              --instance-id "${EC2_INSTANCE_ID}" \
-              --query "StandardOutputContent" \
-              --output text
           fi
+
+          echo "Deployment succeeded! Application should be running at http://<EC2-PUBLIC-IP>:8080"
+          aws ssm get-command-invocation \
+            --command-id "$DEPLOY_CMD_ID" \
+            --instance-id "${EC2_INSTANCE_ID}" \
+            --query "StandardOutputContent" \
+            --output text || true
         '''
       }
     }
