@@ -155,7 +155,13 @@ pipeline {
 
           # EC2 인스턴스 상태 확인
           echo "Checking EC2 instance status..."
-          aws ec2 describe-instances --instance-ids ${EC2_INSTANCE_ID} --query 'Reservations[0].Instances[0].State.Name' --output text
+          EC2_STATUS=$(aws ec2 describe-instances --instance-ids ${EC2_INSTANCE_ID} --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "EC2 instance status: $EC2_STATUS"
+          
+          if [ "$EC2_STATUS" != "running" ]; then
+            echo "ERROR: EC2 instance is not running (current state: $EC2_STATUS)"
+            exit 1
+          fi
           
           # docker-compose.yml 파일이 있는지 확인
           echo "Checking if docker-compose.yml exists on instance..."
@@ -171,7 +177,7 @@ pipeline {
             --command-id "$COMPOSE_CHECK" \
             --instance-id "${EC2_INSTANCE_ID}" \
             --query "StandardOutputContent" \
-            --output text)
+            --output text || echo "MISSING")
           
           echo "Docker Compose file check result: $COMPOSE_RESULT"
           
