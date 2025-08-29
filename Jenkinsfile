@@ -84,7 +84,7 @@ pipeline {
     
     stage('Who am I') {
       steps {
-        withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId:'aws-jenkins-accesskey']]) {
+        withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId: params.AWS_CREDENTIALS_ID]]) {
           sh 'aws sts get-caller-identity'
         }
       }
@@ -92,34 +92,27 @@ pipeline {
     
     stage('AssumeRole') {
       when { 
-        expression { 
-          return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim()
-        }
+        expression { params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim() }
       }
       steps {
         withCredentials([[$class:'AmazonWebServicesCredentialsBinding', credentialsId: params.AWS_CREDENTIALS_ID]]) {
           sh '''
             set -e
-
-            # 한 번의 호출에서 3개 값을 탭으로 구분해 받기
-            read AK SK ST <<EOF
-$(aws sts assume-role \\
-  --role-arn "${DEPLOY_ROLE_ARN}" \\
-  --role-session-name jenkins-deploy \\
-  --duration-seconds 3600 \\
-  --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \\
-  --output text)
-EOF
-
-            # env 파일로 저장 (로그에 값 노출 안 함)
+            CREDS=$(aws sts assume-role \\
+              --role-arn "${DEPLOY_ROLE_ARN}" \\
+              --role-session-name jenkins-deploy \\
+              --duration-seconds 3600 \\
+              --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \\
+              --output text)
+            AK=$(echo "$CREDS" | awk '{print $1}')
+            SK=$(echo "$CREDS" | awk '{print $2}')
+            ST=$(echo "$CREDS" | awk '{print $3}')
             {
               echo "export AWS_ACCESS_KEY_ID=${AK}"
               echo "export AWS_SECRET_ACCESS_KEY=${SK}"
               echo "export AWS_SESSION_TOKEN=${ST}"
               echo "export AWS_DEFAULT_REGION=${AWS_REGION}"
             } > aws_env_export
-
-            # 민감값은 출력하지 않기
             echo "Wrote temporary AWS creds to aws_env_export"
           '''
         }
@@ -151,32 +144,45 @@ EOF
     }
     
     stage('Deploy to EC2') {
-      when { expression { return params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim() } }
+      when { expression { params.DEPLOY_ROLE_ARN?.trim() && params.AWS_ACCOUNT_ID?.trim() && params.EC2_INSTANCE_ID?.trim() } }
       steps {
         sh '''
           set -e
           . ./aws_env_export
 
           echo "Verifying AWS credentials for EC2 deployment..."
-          aws sts get-caller-identity
+          aws sts get-caller-identity >/dev/null
 
-      # SSM 입력 JSON 작성 (변수 확장됨)
-      cat > ssm-send-command.json <<EOF
+          # SSM 입력 JSON 작성 (반드시 EOF 단독 줄로 종료!)
+          cat > ssm-send-command.json <<EOF
 {
   "DocumentName": "AWS-RunShellScript",
   "InstanceIds": ["${EC2_INSTANCE_ID}"],
   "Parameters": {
     "commands": [
+      "mkdir -p /opt/community-portfolio/uploads",
+      "chmod 777 /opt/community-portfolio /opt/community-portfolio/uploads || true",
       "cd /opt/community-portfolio",
       "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
       "docker compose pull app",
-      "docker compose up -d app"
+      "docker compose up -d app",
+      "docker compose ps",
+      "curl -fsS http://localhost:8082/actuator/health || (docker logs --tail=200 community-app || true; exit 1)"
     ]
   },
   "Comment": "Deploy community-portfolio app"
 }
-EOF          echo "Deploying via SSM..."
-          aws ssm send-command --cli-input-json file://ssm-send-command.json --region ${AWS_REGION}
+EOF
+
+          echo "Deploying via SSM..."
+          CMD_ID=$(aws ssm send-command --cli-input-json file://ssm-send-command.json --query "Command.CommandId" --output text)
+
+          echo "Waiting SSM command to finish: $CMD_ID"
+          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "${EC2_INSTANCE_ID}"
+
+          echo "SSM output (last lines):"
+          aws ssm list-command-invocations --command-id "$CMD_ID" --details \\
+            --query "CommandInvocations[0].CommandPlugins[0].Output" --output text | tail -n 50
         '''
       }
     }
