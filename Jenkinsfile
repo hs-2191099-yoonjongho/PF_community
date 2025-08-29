@@ -160,10 +160,10 @@ EOF
           echo "Verifying AWS credentials for EC2 deployment..."
           aws sts get-caller-identity
 
-          # SSM 입력 JSON 작성 (변수 확장됨)
-          cat > ssm-send-command.json <<EOF
+      # SSM 입력 JSON 작성 (변수 확장됨)
+      cat > ssm-send-command.json <<EOF
 {
-  "DocumentName": "arn:aws:ssm:${AWS_REGION}:aws:document/AWS-RunShellScript",
+  "DocumentName": "AWS-RunShellScript",
   "InstanceIds": ["${EC2_INSTANCE_ID}"],
   "Parameters": {
     "commands": [
@@ -175,9 +175,7 @@ EOF
   },
   "Comment": "Deploy community-portfolio app"
 }
-EOF
-
-          echo "Deploying via SSM..."
+EOF          echo "Deploying via SSM..."
           aws ssm send-command --cli-input-json file://ssm-send-command.json --region ${AWS_REGION}
         '''
       }
