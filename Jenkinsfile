@@ -156,17 +156,17 @@ pipeline {
           aws sts get-caller-identity >/dev/null
 
           echo "Checking required SSM parameters under prefix: ${SSM_PREFIX}"
-          REQUIRED_KEYS=( \
-            "${SSM_PREFIX}/db/url" \
-            "${SSM_PREFIX}/db/user" \
-            "${SSM_PREFIX}/db/pass" \
-            "${SSM_PREFIX}/jwt/secret" \
-            "${SSM_PREFIX}/refresh/cookie/secure" \
-            "${SSM_PREFIX}/refresh/cookie/same-site" \
-            "${SSM_PREFIX}/refresh/cookie/domain" \
-            "${SSM_PREFIX}/allowed-origins" \
-          )
-          for key in "${REQUIRED_KEYS[@]}"; do
+          REQUIRED_KEYS="
+${SSM_PREFIX}/db/url
+${SSM_PREFIX}/db/user
+${SSM_PREFIX}/db/pass
+${SSM_PREFIX}/jwt/secret
+${SSM_PREFIX}/refresh/cookie/secure
+${SSM_PREFIX}/refresh/cookie/same-site
+${SSM_PREFIX}/refresh/cookie/domain
+${SSM_PREFIX}/allowed-origins
+"
+          for key in $REQUIRED_KEYS; do
             if ! aws ssm get-parameter --name "$key" --with-decryption --query Parameter.Name --output text >/dev/null 2>&1; then
               echo "Missing required SSM parameter: $key" >&2
               exit 1
