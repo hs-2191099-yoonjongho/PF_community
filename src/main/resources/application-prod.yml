@@ -6,7 +6,9 @@ spring:
   application:
     name: community
   datasource:
-    # 실제 값은 환경 변수로 주입됨
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -50,8 +52,33 @@ springdoc:
   swagger-ui:
     enabled: false
 
-# 운영 쿠키/보안 설정
+jwt:
+  secret: ${JWT_SECRET}
+  access-exp-ms: ${JWT_ACCESS_EXP_MS}
+  issuer: ${JWT_ISSUER}
+
 refresh:
+  exp-ms: ${REFRESH_EXP_MS}
   cookie:
-    secure: true
-    same-site: None
+    name: ${REFRESH_COOKIE_NAME}
+    path: ${REFRESH_COOKIE_PATH}
+    secure: ${REFRESH_COOKIE_SECURE}
+    same-site: ${REFRESH_COOKIE_SAME_SITE}
+    domain: ${REFRESH_COOKIE_DOMAIN}
+
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS}
+  security:
+    token-hash-algorithm: ${SECURITY_HASH_ALGORITHM:SHA-256}
+    max-refresh-tokens-per-user: ${MAX_REFRESH_TOKENS:5}
+    enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:true}
+  storage:
+    provider: local
+    public-base-url: ${PUBLIC_BASE_URL}
+    local:
+      base-path: /app/uploads
+    s3:
+      bucket: ${S3_BUCKET:}
+      region: ap-northeast-2
+      base-url: ${S3_BASE_URL:}

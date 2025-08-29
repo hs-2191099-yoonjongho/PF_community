@@ -326,6 +326,13 @@ else
   echo "WARN: Could not parse DB URL: $DB_URL"
 fi
 
+# 환경변수 디버그 출력
+echo "DEBUG: Environment variables loaded:"
+echo "  DB_URL=$DB_URL"
+echo "  DB_USER=$DB_USER" 
+echo "  JWT_SECRET=[MASKED]"
+echo "  REFRESH_EXP_MS=$REFRESH_EXP_MS"
+
 # 컨테이너 실행
 docker run -d --restart=always --name community-app -p 8080:8080 \
   -e SPRING_PROFILES_ACTIVE=prod \
