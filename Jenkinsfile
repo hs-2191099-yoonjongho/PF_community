@@ -259,55 +259,82 @@ EOF
           fi
 
           # 애플리케이션 배포 명령 JSON 생성
-          echo "Creating deployment commands JSON..."
+          echo "Building remote deploy script (deploy.sh)..."
+          # 1) 원격에서 실행할 배포 스크립트를 로컬에서 생성 (변수 확장 방지를 위해 리터럴 heredoc 사용)
+          cat > deploy-remote.sh <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+
+REGION="__AWS_REGION__"
+ACCOUNT_ID="__ACCOUNT_ID__"
+SSM_PREFIX="__SSM_PREFIX__"
+
+cd /opt/community-portfolio
+mkdir -p uploads
+chmod 777 uploads
+
+# Docker 실행 확인 및 시작 (systemd가 없으면 무시)
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl is-active docker >/dev/null 2>&1 || systemctl start docker || true
+fi
+
+# ECR 로그인 및 최신 이미지 pull
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
+docker pull "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/community-portfolio:latest" || true
+docker rm -f community-app || true
+
+# --- SSM → 환경변수 로드 ---
+DB_URL=$(aws ssm get-parameter --name "$SSM_PREFIX/db/url" --with-decryption --query 'Parameter.Value' --output text)
+DB_USER=$(aws ssm get-parameter --name "$SSM_PREFIX/db/user" --with-decryption --query 'Parameter.Value' --output text)
+DB_PASS=$(aws ssm get-parameter --name "$SSM_PREFIX/db/pass" --with-decryption --query 'Parameter.Value' --output text)
+JWT_SECRET=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/secret" --with-decryption --query 'Parameter.Value' --output text)
+REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/secure" --with-decryption --query 'Parameter.Value' --output text)
+REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/same-site" --with-decryption --query 'Parameter.Value' --output text)
+REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/domain" --with-decryption --query 'Parameter.Value' --output text)
+ALLOWED_ORIGINS=$(aws ssm get-parameter --name "$SSM_PREFIX/allowed-origins" --with-decryption --query 'Parameter.Value' --output text)
+S3_BUCKET=$(aws ssm get-parameter --name "$SSM_PREFIX/s3/bucket" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+
+# 컨테이너 실행
+docker run -d --restart=always --name community-app -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e SPRING_DATASOURCE_URL="$DB_URL" \
+  -e SPRING_DATASOURCE_USERNAME="$DB_USER" \
+  -e SPRING_DATASOURCE_PASSWORD="$DB_PASS" \
+  -e JWT_SECRET="$JWT_SECRET" \
+  -e REFRESH_COOKIE_SECURE="$REFRESH_COOKIE_SECURE" \
+  -e REFRESH_COOKIE_SAME_SITE="$REFRESH_COOKIE_SAME_SITE" \
+  -e REFRESH_COOKIE_DOMAIN="$REFRESH_COOKIE_DOMAIN" \
+  -e ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
+  -e S3_BUCKET="$S3_BUCKET" \
+  -v /opt/community-portfolio/uploads:/app/uploads \
+  "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/community-portfolio:latest"
+
+echo "Container started. Waiting for health..."
+sleep 8
+curl -fsS http://localhost:8080/actuator/health || (docker logs community-app && exit 1)
+EOS
+
+          # 2) 자리표시자 치환 (안전한 구분자 사용)
+          sed -i "s|__ACCOUNT_ID__|${ACCOUNT_ID}|g; s|__AWS_REGION__|${AWS_REGION}|g; s|__SSM_PREFIX__|${SSM_PREFIX}|g" deploy-remote.sh
+
+          # 3) base64 인코딩 후 SSM으로 스크립트 전송 및 실행
+          if base64 --help 2>&1 | grep -q -- "-w"; then
+            DEPLOY_B64=$(base64 -w0 deploy-remote.sh)
+          else
+            DEPLOY_B64=$(base64 deploy-remote.sh | tr -d '\n')
+          fi
+
           cat > deploy-params.json <<EOF
 {
   "commands": [
-    "cd /opt/community-portfolio",
-    "mkdir -p uploads",
-    "chmod 777 uploads",
-
-    "# Docker 실행 확인 및 시작",
-    "command -v systemctl >/dev/null 2>&1 && (systemctl is-active docker >/dev/null 2>&1 || systemctl start docker) || true",
-    
-    "# ECR 로그인 및 이미지 pull",
-    "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
-    "docker pull ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
-    "docker rm -f community-app || true",
-
-  "# --- DB 환경변수 채우기 (SSM → 셸 변수) ---",
-  "DB_URL=$(aws ssm get-parameter --name \"${SSM_PREFIX}/db/url\" --with-decryption --query Parameter.Value --output text)",
-  "DB_USER=$(aws ssm get-parameter --name \"${SSM_PREFIX}/db/user\" --with-decryption --query Parameter.Value --output text)",
-  "DB_PASS=$(aws ssm get-parameter --name \"${SSM_PREFIX}/db/pass\" --with-decryption --query Parameter.Value --output text)",
-  "JWT_SECRET=$(aws ssm get-parameter --name \"${SSM_PREFIX}/jwt/secret\" --with-decryption --query Parameter.Value --output text)",
-  "REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name \"${SSM_PREFIX}/refresh/cookie/secure\" --with-decryption --query Parameter.Value --output text)",
-  "REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name \"${SSM_PREFIX}/refresh/cookie/same-site\" --with-decryption --query Parameter.Value --output text)",
-  "REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name \"${SSM_PREFIX}/refresh/cookie/domain\" --with-decryption --query Parameter.Value --output text)",
-  "ALLOWED_ORIGINS=$(aws ssm get-parameter --name \"${SSM_PREFIX}/allowed-origins\" --with-decryption --query Parameter.Value --output text)",
-  "S3_BUCKET=$(aws ssm get-parameter --name \"${SSM_PREFIX}/s3/bucket\" --with-decryption --query Parameter.Value --output text 2>/dev/null || echo \"\")",
-    
-    "docker run -d --restart=always --name community-app -p 8080:8080 \\
-      -e SPRING_PROFILES_ACTIVE=prod \\
-      -e SPRING_DATASOURCE_URL=\"$DB_URL\" \\
-      -e SPRING_DATASOURCE_USERNAME=\"$DB_USER\" \\
-      -e SPRING_DATASOURCE_PASSWORD=\"$DB_PASS\" \\
-      -e JWT_SECRET=\"$JWT_SECRET\" \\
-      -e REFRESH_COOKIE_SECURE=\"$REFRESH_COOKIE_SECURE\" \\
-      -e REFRESH_COOKIE_SAME_SITE=\"$REFRESH_COOKIE_SAME_SITE\" \\
-      -e REFRESH_COOKIE_DOMAIN=\"$REFRESH_COOKIE_DOMAIN\" \\
-      -e ALLOWED_ORIGINS=\"$ALLOWED_ORIGINS\" \\
-      -e S3_BUCKET=\"$S3_BUCKET\" \\
-      -v /opt/community-portfolio/uploads:/app/uploads \\
-      ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio:latest",
-
-    "docker ps",
-    "sleep 8",
-    "curl -fsS http://localhost:8080/actuator/health || (docker logs community-app && exit 1)"
+    "mkdir -p /opt/community-portfolio",
+    "echo \"${DEPLOY_B64}\" | base64 -d > /opt/community-portfolio/deploy.sh",
+    "chmod +x /opt/community-portfolio/deploy.sh",
+    "/opt/community-portfolio/deploy.sh"
   ]
 }
 EOF
 
-          # 배포 실행
           echo "Deploying application via SSM..."
           DEPLOY_CMD_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
@@ -321,7 +348,7 @@ EOF
           aws ssm wait command-executed \
             --command-id "$DEPLOY_CMD_ID" \
             --instance-id "${EC2_INSTANCE_ID}" || echo "Wait command timed out, but continuing..."
-          
+
           # 배포 결과 확인
           echo "Checking deployment results..."
           DEPLOY_RESULT=$(aws ssm get-command-invocation \
@@ -329,9 +356,9 @@ EOF
             --instance-id "${EC2_INSTANCE_ID}" \
             --query "Status" \
             --output text)
-            
+
           echo "Deployment status: $DEPLOY_RESULT"
-          
+
           if [ "$DEPLOY_RESULT" != "Success" ]; then
             echo "ERROR: Deployment failed. Details:"
             aws ssm get-command-invocation \
