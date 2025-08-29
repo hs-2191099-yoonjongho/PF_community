@@ -10,7 +10,7 @@ pipeline {
 
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
-    booleanParam(name: 'SKIP_TESTS', defaultValue: true, description: 'Skip tests for faster builds (useful if DB not ready)')
+    booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip tests for faster builds (useful if DB not ready)')
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
     string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
     string(name: 'EC2_INSTANCE_ID', defaultValue: '', description: 'EC2 인스턴스 ID')
@@ -29,8 +29,6 @@ pipeline {
     IMAGE_TAG = "${env.BUILD_NUMBER}"
     EC2_INSTANCE_ID = "${params.EC2_INSTANCE_ID}"
     DEPLOY_ROLE_ARN = "${params.DEPLOY_ROLE_ARN}"
-    // RDS 데이터베이스 연결 정보 - Jenkins Credentials에서 가져옴
-    DB_URL = "jdbc:mysql://community-portfolio-db.cpwugs42oblp.ap-northeast-2.rds.amazonaws.com:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci"
   }
 
   stages {
@@ -63,13 +61,9 @@ pipeline {
     stage('Build') {
       steps {
         sh './gradlew --version'
-        withCredentials([
-          usernamePassword(credentialsId: 'rds-credentials', usernameVariable: 'DB_USERNAME', passwordVariable: 'DB_PASSWORD')
-        ]) {
-          script {
-            def buildCmd = params.SKIP_TESTS ? './gradlew --no-daemon clean assemble -x test' : './gradlew --no-daemon clean build'
-            sh buildCmd
-          }
+        script {
+          def buildCmd = params.SKIP_TESTS ? './gradlew --no-daemon clean assemble -x test' : './gradlew --no-daemon clean build'
+          sh buildCmd
         }
       }
     }
@@ -162,20 +156,29 @@ EOF
         sh '''
           set -e
           . ./aws_env_export
-          
+
           echo "Verifying AWS credentials for EC2 deployment..."
           aws sts get-caller-identity
-          
-          echo "Deploying to EC2 instance ${EC2_INSTANCE_ID}..."
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "${EC2_INSTANCE_ID}" \
-            --parameters commands="cd /opt/community-portfolio && \
-                                 aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com && \
-                                 docker compose pull app && \
-                                 docker compose up -d app" \
-            --region ${AWS_REGION} \
-            --comment "Deploy community-portfolio app"
+
+          # SSM 입력 JSON 작성 (변수 확장됨)
+          cat > ssm-send-command.json <<EOF
+{
+  "DocumentName": "arn:aws:ssm:${AWS_REGION}:aws:document/AWS-RunShellScript",
+  "InstanceIds": ["${EC2_INSTANCE_ID}"],
+  "Parameters": {
+    "commands": [
+      "cd /opt/community-portfolio",
+      "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com",
+      "docker compose pull app",
+      "docker compose up -d app"
+    ]
+  },
+  "Comment": "Deploy community-portfolio app"
+}
+EOF
+
+          echo "Deploying via SSM..."
+          aws ssm send-command --cli-input-json file://ssm-send-command.json --region ${AWS_REGION}
         '''
       }
     }
