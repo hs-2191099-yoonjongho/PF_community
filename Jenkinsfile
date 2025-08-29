@@ -199,13 +199,12 @@ services:
       - ./uploads:/app/uploads
 EOF
 
-            # 원격 서버에 docker-compose.yml 파일 생성
+            # 원격 서버에 docker-compose.yml 파일 생성 (JSON 문법 사용)
+            COMPOSE_CONTENT=$(cat docker-compose-remote.yml)
             aws ssm send-command \
               --document-name "AWS-RunShellScript" \
               --instance-ids "${EC2_INSTANCE_ID}" \
-              --parameters commands="mkdir -p /opt/community-portfolio && cat > /opt/community-portfolio/docker-compose.yml << 'EOL'
-$(cat docker-compose-remote.yml)
-EOL" \
+              --parameters '{"commands":["mkdir -p /opt/community-portfolio", "cat > /opt/community-portfolio/docker-compose.yml << EOL\n'"$COMPOSE_CONTENT"'\nEOL"]}' \
               --output text
             
             sleep 3
