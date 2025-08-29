@@ -4,6 +4,9 @@ import com.example.community.domain.support.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @NoArgsConstructor @AllArgsConstructor @Builder
 @Entity
@@ -22,6 +25,11 @@ public class Post extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "author_id")
     private Member author;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private BoardType boardType = BoardType.FREE; // 기본값은 자유게시판
 
     @Column(nullable = false)
     private long viewCount;
@@ -32,6 +40,10 @@ public class Post extends BaseTimeEntity {
 
     @Version // 낙관적 락으로 동시성 제어
     private Long version;
+    
+    @Builder.Default
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PostImage> images = new ArrayList<>();
     
     // 비즈니스 메서드: 조회수 증가
     public void incrementViewCount() {
@@ -72,5 +84,23 @@ public class Post extends BaseTimeEntity {
         if (content == null || content.trim().isEmpty()) {
             throw new IllegalArgumentException("내용은 필수입니다");
         }
+    }
+    
+    // 이미지 관련 메서드
+    public void addImage(PostImage image) {
+        this.images.add(image);
+        if (image.getPost() != this) {
+            image.setPost(this);
+        }
+    }
+    
+    public void removeImage(PostImage image) {
+        this.images.remove(image);
+        image.setPost(null); // 양방향 관계 끊기 → orphanRemoval 확실히 동작
+    }
+    
+    public void clearImages() {
+        images.forEach(image -> image.setPost(null));
+        this.images.clear();
     }
 }

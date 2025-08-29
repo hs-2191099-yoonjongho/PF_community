@@ -30,4 +30,9 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.user.id = :userId AND rt.revoked = false")
     int bulkRevokeByUserId(@Param("userId") Long userId);
+    
+    // 회원 탈퇴 시 해당 회원의 모든 토큰 삭제
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM RefreshToken rt WHERE rt.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 }

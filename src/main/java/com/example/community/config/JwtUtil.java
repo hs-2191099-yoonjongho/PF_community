@@ -35,12 +35,12 @@ public class JwtUtil {
                 .build();
     }
 
-    public String generateAccessToken(String username) {
+    public String generateAccessToken(String email) {
         Date now = new Date();
         Date exp = new Date(now.getTime() + accessExpMs);
 
         return Jwts.builder()
-                .setSubject(username)
+                .setSubject(email)
                 .setIssuer(issuer)
                 .setIssuedAt(now)
                 .setExpiration(exp)
@@ -57,7 +57,7 @@ public class JwtUtil {
         }
     }
 
-    public String getUsername(String token) {
+    public String getEmail(String token) {
         return parser.parseClaimsJws(token).getBody().getSubject();
     }
 }

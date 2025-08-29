@@ -36,9 +36,17 @@ public class SecurityConfig {
     private final JwtUtil jwtUtil;
     private final CustomUserDetailsService userDetailsService;
 
-    // ★ yml에서 허용 오리진을 받아옵니다(쉼표 구분).
-    @Value("#{'${app.cors.allowed-origins}'.split(',')}")
-    private List<String> allowedOrigins;
+    // ★ yml에서 허용 오리진을 받아와 trim/distinct 처리
+    @Value("${app.cors.allowed-origins}")
+    private String allowedOriginsRaw;
+    private List<String> allowedOrigins() {
+        if (allowedOriginsRaw == null || allowedOriginsRaw.isBlank()) return List.of();
+        return java.util.Arrays.stream(allowedOriginsRaw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
+    }
 
     @Bean
     public AuthenticationEntryPoint authenticationEntryPoint() {
@@ -70,6 +78,12 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults()) // ★ 아래 CORS Bean 사용
                 .csrf(csrf -> csrf.disable())
+        .headers(headers -> headers
+            .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"))
+            .frameOptions(frame -> frame.deny())
+            .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).preload(true))
+            .contentTypeOptions(Customizer.withDefaults())
+        )
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authenticationEntryPoint())
@@ -78,8 +92,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // preflight
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/posts/**", "/api/comments/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/files/**").permitAll()   // 정적 리소스 공개
+                        .requestMatchers("/api/files/**").authenticated()           // 파일 업로드/삭제는 인증 필요
                         .anyRequest().authenticated()
                 );
 
@@ -93,10 +110,11 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(allowedOrigins); // yml에서 주입
+    CorsConfiguration cfg = new CorsConfiguration();
+    cfg.setAllowedOrigins(allowedOrigins()); // trim/distinct 반영
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS","HEAD")); // ★ PATCH 추가
         cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With"));
+    cfg.setExposedHeaders(List.of("Content-Disposition"));  // 파일 다운로드용 헤더 노출
         cfg.setAllowCredentials(true);                 // ★ 쿠키/인증정보 포함 허용
         cfg.setMaxAge(Duration.ofHours(1));
 
@@ -107,7 +125,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(PasswordEncoder encoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(encoder);
         return new ProviderManager(provider);
     }
