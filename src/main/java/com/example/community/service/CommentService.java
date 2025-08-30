@@ -15,8 +15,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 @Service
 @RequiredArgsConstructor
 public class CommentService {
@@ -32,35 +30,6 @@ public class CommentService {
                 .orElseThrow(() -> new EntityNotFoundException("작성자", authorId));
         Comment c = Comment.builder().post(post).author(author).content(content).build();
         return comments.save(c);
-    }
-
-    /**
-     * @deprecated 최적화되지 않은 메서드입니다. 대신 {@link #getProjectionsByPostWithPaging(Long, Pageable)}를 사용하세요.
-     */
-    @Deprecated(forRemoval = true)
-    @Transactional(readOnly = true)
-    public List<Comment> getByPost(Long postId) {
-        Post post = posts.findById(postId)
-                .orElseThrow(() -> new EntityNotFoundException("게시글", postId));
-        return comments.findByPost(post);
-    }
-    
-    /**
-     * @deprecated 최적화되지 않은 메서드입니다. 대신 {@link #getProjectionsByPostWithPaging(Long, Pageable)}를 사용하세요.
-     */
-    @Deprecated(forRemoval = true)
-    @Transactional(readOnly = true)
-    public Page<Comment> getByPostWithPaging(Long postId, Pageable pageable) {
-        // 게시글 존재 여부 확인
-        if (!posts.existsById(postId)) {
-            throw new EntityNotFoundException("게시글", postId);
-        }
-        
-        // 정렬 필드 화이트리스트 검증 (이미 컨트롤러에서 적용되었을 수 있으나, 서비스 단에서도 보안 강화)
-        Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
-        
-        // 최적화된 쿼리 사용 (Post 엔티티 조회 없이 직접 postId로 조회)
-        return comments.findByPostId(postId, safePageable);
     }
     
     /**
