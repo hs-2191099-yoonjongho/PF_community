@@ -84,7 +84,7 @@ public class PostController {
         return ResponseEntity.ok(body);
     }
     
-    // 인기 게시글 (추천수 30 이상)
+    // 인기 게시글 (추천수 10 이상)
     @GetMapping("/popular")
     public ResponseEntity<Page<PostRes>> getPopular(Pageable pageable) {
         log.info("인기 게시글 목록 조회 요청");
@@ -98,7 +98,7 @@ public class PostController {
         return ResponseEntity.ok(body);
     }
     
-    // 베스트 게시글 (추천수 100 이상)
+    // 베스트 게시글 (추천수 30 이상)
     @GetMapping("/best")
     public ResponseEntity<Page<PostRes>> getBest(Pageable pageable) {
         log.info("베스트 게시글 목록 조회 요청");

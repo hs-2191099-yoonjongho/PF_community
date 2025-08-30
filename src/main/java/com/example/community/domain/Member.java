@@ -69,6 +69,11 @@ public class Member extends BaseTimeEntity {
         this.withdrawalDate = LocalDateTime.now();
     }
     
+    // 활성 상태 확인 메서드
+    public boolean isActive() {
+        return this.active;
+    }
+    
     // 개인정보 수정을 위한 메서드들 - 탈퇴 처리용
     public void setUsername(String username) {
         this.username = username;

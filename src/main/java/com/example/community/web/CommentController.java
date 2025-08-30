@@ -70,7 +70,7 @@ public class CommentController {
     @GetMapping("/api/comments/paged")
     public ResponseEntity<Map<String, Object>> getByPostPaged(
             @RequestParam Long postId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         // 안전한 정렬 적용
         Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
@@ -99,7 +99,7 @@ public class CommentController {
     @GetMapping("/api/comments/optimized")
     public ResponseEntity<Map<String, Object>> getOptimizedByPostPaged(
             @RequestParam Long postId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         // 안전한 정렬 적용
         Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
@@ -133,7 +133,7 @@ public class CommentController {
     @GetMapping("/api/posts/{postId}/comments")
     public ResponseEntity<Map<String, Object>> getCommentsByPost(
             @PathVariable Long postId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         // 안전한 정렬 적용
         Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);

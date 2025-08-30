@@ -17,9 +17,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(originValidationInterceptor)
             .addPathPatterns("/api/**")
             .excludePathPatterns(
-                "/api/auth/login",     // 로그인은 제외 (초기 요청)
-                "/api/auth/signup",    // 회원가입은 제외 (register -> signup)
-                "/api/posts/**"        // 공개 게시물 조회는 제외
+                // GET 메소드만 제외하는 것으로 변경 - 인터셉터에서 GET은 이미 허용하기 때문
+                // "/api/posts",             // 게시글 목록 조회는 제외
+                // "/api/posts/filter",      // 필터링된 게시글 목록은 제외
+                // "/api/posts/popular",     // 인기 게시글 목록은 제외
+                // "/api/posts/best",        // 베스트 게시글 목록은 제외
+                // "/api/posts/recommended", // 추천 게시글 목록은 제외
+                // "/api/posts/board/**",    // 게시판별 게시글 목록은 제외
+                // "/api/posts/*"            // 숫자 ID에 대응 (like는 제외됨: /api/posts/*/like)
             );
     }
 }
