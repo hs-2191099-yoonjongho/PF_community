@@ -291,6 +291,9 @@ docker rm -f community-app || true
 DB_URL=$(aws ssm get-parameter --name "$SSM_PREFIX/db/url" --with-decryption --query 'Parameter.Value' --output text)
 DB_USER=$(aws ssm get-parameter --name "$SSM_PREFIX/db/user" --with-decryption --query 'Parameter.Value' --output text)
 DB_PASS=$(aws ssm get-parameter --name "$SSM_PREFIX/db/pass" --with-decryption --query 'Parameter.Value' --output text)
+
+# EC2 인스턴스의 퍼블릭 IP 가져오기
+EC2_PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 JWT_SECRET=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/secret" --with-decryption --query 'Parameter.Value' --output text)
 JWT_ACCESS_EXP_MS=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/access-exp-ms" --with-decryption --query 'Parameter.Value' --output text)
 JWT_ISSUER=$(aws ssm get-parameter --name "$SSM_PREFIX/jwt/issuer" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "community-app")
@@ -347,7 +350,7 @@ docker run -d --restart=always --name community-app -p 8080:8080 \
   -e REFRESH_COOKIE_PATH="$REFRESH_COOKIE_PATH" \
   -e REFRESH_COOKIE_SECURE="$REFRESH_COOKIE_SECURE" \
   -e REFRESH_COOKIE_SAME_SITE="$REFRESH_COOKIE_SAME_SITE" \
-  -e REFRESH_COOKIE_DOMAIN="$REFRESH_COOKIE_DOMAIN" \
+  -e REFRESH_COOKIE_DOMAIN="${REFRESH_COOKIE_DOMAIN:-$EC2_PUBLIC_IP}" \
   -e ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
   -e PUBLIC_BASE_URL="http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080/files" \
   -e S3_BUCKET="$S3_BUCKET" \
