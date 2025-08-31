@@ -167,9 +167,9 @@ ${SSM_PREFIX}/refresh/cookie/name
 ${SSM_PREFIX}/refresh/cookie/path
 ${SSM_PREFIX}/refresh/cookie/secure
 ${SSM_PREFIX}/refresh/cookie/same-site
-${SSM_PREFIX}/refresh/cookie/domain
 ${SSM_PREFIX}/allowed-origins
 "
+          # domain은 필수가 아님 (EC2 IP로 대체 가능)
           for key in $REQUIRED_KEYS; do
             if ! aws ssm get-parameter --name "$key" --with-decryption --query Parameter.Name --output text >/dev/null 2>&1; then
               echo "Missing required SSM parameter: $key" >&2
@@ -302,7 +302,7 @@ REFRESH_COOKIE_NAME=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/n
 REFRESH_COOKIE_PATH=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/path" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SECURE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/secure" --with-decryption --query 'Parameter.Value' --output text)
 REFRESH_COOKIE_SAME_SITE=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/same-site" --with-decryption --query 'Parameter.Value' --output text)
-REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/domain" --with-decryption --query 'Parameter.Value' --output text)
+REFRESH_COOKIE_DOMAIN=$(aws ssm get-parameter --name "$SSM_PREFIX/refresh/cookie/domain" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
 ALLOWED_ORIGINS=$(aws ssm get-parameter --name "$SSM_PREFIX/allowed-origins" --with-decryption --query 'Parameter.Value' --output text)
 S3_BUCKET=$(aws ssm get-parameter --name "$SSM_PREFIX/s3/bucket" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
 
