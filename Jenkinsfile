@@ -277,7 +277,8 @@ SSM_PREFIX="__SSM_PREFIX__"
 
 cd /opt/community-portfolio
 mkdir -p uploads
-chmod 777 uploads
+chmod -R 777 uploads
+chmod 777 .
 
 # Docker 실행 확인 및 시작 (systemd가 없으면 무시)
 if command -v systemctl >/dev/null 2>&1; then

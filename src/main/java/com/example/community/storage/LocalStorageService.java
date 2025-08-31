@@ -27,9 +27,51 @@ public class LocalStorageService implements Storage {
     public void init() {
         base = Path.of(basePath).toAbsolutePath().normalize();
         try {
-            Files.createDirectories(base);
+            // 기본 디렉토리 존재 확인 및 생성
+            if (!Files.exists(base)) {
+                Files.createDirectories(base);
+                System.out.println("스토리지 기본 경로 생성됨: " + base);
+            } else {
+                System.out.println("스토리지 기본 경로 이미 존재함: " + base);
+            }
+            
+            // 디렉토리 쓰기 권한 확인
+            if (!Files.isWritable(base)) {
+                System.err.println("경고: 스토리지 기본 경로에 쓰기 권한이 없습니다: " + base);
+                
+                // 권한 설정 시도 (Linux/Unix 환경에서만 작동)
+                try {
+                    String absolutePath = base.toString();
+                    Process process = Runtime.getRuntime().exec(new String[] { "chmod", "-R", "777", absolutePath });
+                    int exitCode = process.waitFor();
+                    if (exitCode == 0) {
+                        System.out.println("스토리지 기본 경로 권한 설정 성공: " + base);
+                    } else {
+                        System.err.println("스토리지 기본 경로 권한 설정 실패: exit code=" + exitCode);
+                    }
+                } catch (Exception e) {
+                    System.err.println("스토리지 기본 경로 권한 설정 중 오류: " + e.getMessage());
+                }
+            }
+            
+            // posts 서브디렉토리 확인 및 생성
+            Path postsDir = base.resolve("posts");
+            if (!Files.exists(postsDir)) {
+                Files.createDirectories(postsDir);
+                System.out.println("posts 디렉토리 생성됨: " + postsDir);
+            }
+            
+            // 확인된 경로 및 권한 정보 출력
+            System.out.println("스토리지 설정 완료:");
+            System.out.println("- 기본 경로: " + base);
+            System.out.println("- 쓰기 가능: " + Files.isWritable(base));
+            System.out.println("- 읽기 가능: " + Files.isReadable(base));
+            System.out.println("- 실행 가능: " + Files.isExecutable(base));
+            
         } catch (Exception e) {
-            throw new StorageException("스토리지 기본 경로를 생성할 수 없습니다: " + e.getMessage(), e);
+            String message = "스토리지 기본 경로를 생성할 수 없습니다: " + e.getMessage();
+            System.err.println(message);
+            throw new StorageException(message, e);
         }
     }
     

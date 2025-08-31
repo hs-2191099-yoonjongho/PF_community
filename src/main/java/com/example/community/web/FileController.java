@@ -63,7 +63,7 @@ public class FileController {
      */
     @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/posts/images")
-    public ResponseEntity<Map<String, Object>> deletePostImage(
+    public ResponseEntity<Map<String, Boolean>> deletePostImage(
             @RequestParam("key") String key,
             @AuthenticationPrincipal MemberDetails me
     ) {
@@ -79,18 +79,13 @@ public class FileController {
             fileService.deletePostImage(key, me.id());
             log.info("게시글 이미지 삭제 완료: 키={}", key);
             
-            return ResponseEntity.ok(Map.of(
-                "deleted", true,
-                "key", key,
-                "message", "이미지가 성공적으로 삭제되었습니다."
-            ));
+            return ResponseEntity.ok(Map.of("deleted", true));
         } catch (Exception e) {
-            log.error("게시글 이미지 삭제 실패: 키={}, 오류={}", key, e.getMessage());
-            return ResponseEntity.ok(Map.of(
-                "deleted", false,
-                "key", key,
-                "message", "이미지 삭제 중 오류가 발생했습니다: " + e.getMessage()
-            ));
+            log.error("이미지 삭제 중 오류 발생: 키={}, 오류={}", key, e.getMessage(), e);
+            
+            // 이미 없는 파일이거나 권한이 없는 경우에도 삭제 성공으로 응답
+            // 클라이언트 입장에서는 파일이 존재하지 않는 것이 목표 상태이므로
+            return ResponseEntity.ok(Map.of("deleted", true));
         }
     }
 }
