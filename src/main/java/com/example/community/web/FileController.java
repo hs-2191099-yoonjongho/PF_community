@@ -63,7 +63,7 @@ public class FileController {
      */
     @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/posts/images")
-    public ResponseEntity<Map<String, Boolean>> deletePostImage(
+    public ResponseEntity<Map<String, Object>> deletePostImage(
             @RequestParam("key") String key,
             @AuthenticationPrincipal MemberDetails me
     ) {
@@ -74,10 +74,23 @@ public class FileController {
             throw new IllegalArgumentException(FilePolicy.ERR_PATH_TRAVERSAL);
         }
         
-        // 2. 권한 검증 및 삭제 처리 - DB 연동 (보안: 권한 없는 파일 삭제 방지)
-        fileService.deletePostImage(key, me.id());
-        log.info("게시글 이미지 삭제 완료: 키={}", key);
-        
-        return ResponseEntity.ok(Map.of("deleted", true));
+        try {
+            // 2. 권한 검증 및 삭제 처리 - DB 연동 (보안: 권한 없는 파일 삭제 방지)
+            fileService.deletePostImage(key, me.id());
+            log.info("게시글 이미지 삭제 완료: 키={}", key);
+            
+            return ResponseEntity.ok(Map.of(
+                "deleted", true,
+                "key", key,
+                "message", "이미지가 성공적으로 삭제되었습니다."
+            ));
+        } catch (Exception e) {
+            log.error("게시글 이미지 삭제 실패: 키={}, 오류={}", key, e.getMessage());
+            return ResponseEntity.ok(Map.of(
+                "deleted", false,
+                "key", key,
+                "message", "이미지 삭제 중 오류가 발생했습니다: " + e.getMessage()
+            ));
+        }
     }
 }

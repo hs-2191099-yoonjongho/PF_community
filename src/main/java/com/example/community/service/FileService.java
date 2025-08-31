@@ -154,30 +154,51 @@ public class FileService {
      * @param key 삭제할 이미지 키
      * @param memberId 삭제 요청자 ID
      * @throws AccessDeniedException 이미지 소유자가 아닌 경우
-     * @throws EntityNotFoundException 이미지가 존재하지 않는 경우
      */
     @Transactional
     public void deletePostImage(String key, Long memberId) {
-        // 이미지 엔티티 조회
-        PostImage image = postImageRepository.findByFileKey(key)
-                .orElseThrow(() -> new EntityNotFoundException("이미지", key));
-        
-        // 소유권 검증 - DB 기반으로 소유자 검증
-        if (!image.getPost().getAuthor().getId().equals(memberId)) {
-            throw new AccessDeniedException("본인 게시글의 이미지만 삭제할 수 있습니다");
-        }
-        
         try {
-            // 스토리지에서 파일 삭제
-            storage.delete(key);
+            // 이미지 엔티티 조회
+            Optional<PostImage> imageOpt = postImageRepository.findByFileKey(key);
             
-            // DB에서 이미지 엔티티 삭제
-            postImageRepository.delete(image);
+            if (imageOpt.isPresent()) {
+                // DB에 이미지 정보가 있는 경우 - 소유권 검증 후 삭제
+                PostImage image = imageOpt.get();
+                
+                // 소유권 검증 - DB 기반으로 소유자 검증
+                if (!image.getPost().getAuthor().getId().equals(memberId)) {
+                    throw new AccessDeniedException("본인 게시글의 이미지만 삭제할 수 있습니다");
+                }
+                
+                // DB에서 이미지 엔티티 삭제
+                postImageRepository.delete(image);
+                log.debug("DB에서 이미지 정보 삭제 성공: 회원={}, 키={}", memberId, key);
+            } else {
+                // DB에 이미지 정보가 없는 경우 - 사용자가 해당 키로 파일 업로드했는지 확인
+                String userDir = String.format("%s/%d", FilePolicy.POST_IMAGES_PATH, memberId);
+                if (!key.startsWith(userDir)) {
+                    // 사용자의 디렉토리가 아니면 접근 거부
+                    throw new AccessDeniedException("본인이 업로드한 이미지만 삭제할 수 있습니다");
+                }
+                log.warn("DB에 이미지 정보가 없지만 키 경로 확인으로 삭제 진행: 회원={}, 키={}", memberId, key);
+            }
             
-            log.debug("이미지 삭제 성공: 회원={}, 키={}", memberId, key);
+            // 스토리지에서 파일 삭제 시도 (파일이 없어도 예외 발생하지 않음)
+            if (storage.exists(key)) {
+                storage.delete(key);
+                log.debug("스토리지에서 이미지 파일 삭제 성공: 회원={}, 키={}", memberId, key);
+            } else {
+                log.warn("스토리지에 파일이 존재하지 않음: 키={}", key);
+            }
+            
+        } catch (AccessDeniedException e) {
+            // 접근 권한 없음 - 그대로 전파
+            log.error("이미지 삭제 권한 없음: 회원={}, 키={}", memberId, key);
+            throw e;
         } catch (Exception e) {
+            // 기타 예외
             log.error("이미지 삭제 실패: 회원={}, 키={}, 오류={}", 
-                    memberId, key, e.getMessage());
+                    memberId, key, e.getMessage(), e);
             throw new RuntimeException("이미지 삭제 실패: " + e.getMessage(), e);
         }
     }
