@@ -179,19 +179,22 @@ pipeline {
           echo "Validating temporary credentials..."
           aws sts get-caller-identity
 
-          echo "Logging in to ECR..."
-          aws ecr get-login-password --region ${AWS_REGION} | \
-            docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
           REPO=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/community-portfolio
           SHA=$(git rev-parse --short HEAD)
-
-          # 브랜치 채널 태그( staging | latest ) + 커밋 SHA 태그 동시 푸시
           CHANNEL_TAG=${IMAGE_CHANNEL_TAG}
           if [ -z "$CHANNEL_TAG" ]; then CHANNEL_TAG=latest; fi
-          docker build -t $REPO:$CHANNEL_TAG -t $REPO:$SHA .
-          docker push $REPO:$CHANNEL_TAG
-          docker push $REPO:$SHA
+
+          echo "Building and pushing image to ECR via Jib (no Docker daemon)..."
+          ./gradlew --no-daemon jib \
+            -Djib.to.image=$REPO:$CHANNEL_TAG \
+            -Djib.to.auth.username=AWS \
+            -Djib.to.auth.password="$(aws ecr get-login-password --region ${AWS_REGION})"
+
+          echo "Tagging commit SHA as well..."
+          ./gradlew --no-daemon jib \
+            -Djib.to.image=$REPO:$SHA \
+            -Djib.to.auth.username=AWS \
+            -Djib.to.auth.password="$(aws ecr get-login-password --region ${AWS_REGION})"
         '''
       }
     }
