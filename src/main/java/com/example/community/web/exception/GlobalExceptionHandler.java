@@ -6,6 +6,7 @@ import com.example.community.service.exception.TokenReuseDetectedException;
 import com.example.community.service.exception.WithdrawalException;
 import com.example.community.storage.StorageException;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ import java.util.Map;
  * 모든 컨트롤러에서 발생하는 예외를 처리하여 일관된 응답 형식을 제공합니다.
  */
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     /**
@@ -100,6 +102,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(StorageException.class)
     public ResponseEntity<Map<String, Object>> handleStorageException(StorageException e) {
+        log.error("Storage error occurred", e);
         Map<String, Object> body = base(HttpStatus.INTERNAL_SERVER_ERROR, "storage_error");
         body.put("message", e.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
@@ -173,9 +176,11 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception e) {
+        String errorId = java.util.UUID.randomUUID().toString();
+        log.error("Unexpected error occurred (ID: {})", errorId, e);
+        
         Map<String, Object> body = base(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error");
         // 내부 에러 메시지는 노출하지 않고, 식별용 errorId만 제공(서버 로그와 매칭 용도)
-        String errorId = java.util.UUID.randomUUID().toString();
         body.put("message", "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
         body.put("errorId", errorId);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);

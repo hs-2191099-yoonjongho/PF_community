@@ -32,7 +32,8 @@ spring:
 
 logging:
   level:
-    root: WARN
+    root: INFO
+    com.example.community: DEBUG
     org.hibernate.SQL: off
     org.hibernate.orm.jdbc.bind: off
 

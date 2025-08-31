@@ -221,7 +221,9 @@ EOF
 {
   "commands": [
     "mkdir -p /opt/community-portfolio",
-  "echo '${COMPOSE_B64}' | base64 -d > /opt/community-portfolio/docker-compose.yml",
+    "mkdir -p /opt/community-portfolio/uploads",
+    "chmod -R 777 /opt/community-portfolio/uploads",
+    "echo '${COMPOSE_B64}' | base64 -d > /opt/community-portfolio/docker-compose.yml",
     "ls -la /opt/community-portfolio"
   ]
 }
@@ -354,6 +356,7 @@ docker run -d --restart=always --name community-app -p 8080:8080 \
   -e ALLOWED_ORIGINS="$ALLOWED_ORIGINS" \
   -e PUBLIC_BASE_URL="http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080/files" \
   -e S3_BUCKET="$S3_BUCKET" \
+  -e AWS_REGION="$REGION" \
   -v /opt/community-portfolio/uploads:/app/uploads \
   "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/community-portfolio:latest"
 
@@ -397,7 +400,9 @@ EOS
 {
   "commands": [
     "mkdir -p /opt/community-portfolio",
-  "echo '${DEPLOY_B64}' | base64 -d > /opt/community-portfolio/deploy.sh",
+    "mkdir -p /opt/community-portfolio/uploads", 
+    "chmod -R 777 /opt/community-portfolio/uploads",
+    "echo '${DEPLOY_B64}' | base64 -d > /opt/community-portfolio/deploy.sh",
     "chmod +x /opt/community-portfolio/deploy.sh",
     "/opt/community-portfolio/deploy.sh"
   ]
