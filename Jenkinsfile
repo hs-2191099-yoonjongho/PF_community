@@ -10,6 +10,7 @@ pipeline {
 
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
+  string(name: 'GIT_BRANCH', defaultValue: 'branch(v7)', description: '빌드할 브랜치(멀티브랜치가 아닌 단일 파이프라인일 때 사용). 예: main, develop, branch(v7)')
   booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip tests (default=false). CI는 기본적으로 테스트를 실행합니다.')
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
     string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
@@ -48,8 +49,9 @@ pipeline {
           if (params.GIT_CREDENTIALS_ID?.trim()) {
             remote.credentialsId = params.GIT_CREDENTIALS_ID.trim()
           }
-          // 멀티브랜치 파이프라인이면 env.BRANCH_NAME 제공됨. 없으면 기본 브랜치로 폴백
-          def branchToBuild = env.BRANCH_NAME?.trim() ? "*/${env.BRANCH_NAME.trim()}" : '*/branch(v7)'
+          // 멀티브랜치 파이프라인이면 env.BRANCH_NAME 제공됨. 없으면 파라미터 GIT_BRANCH를 폴백으로 사용
+          def fallback = params.GIT_BRANCH?.trim() ? "*/${params.GIT_BRANCH.trim()}" : '*/main'
+          def branchToBuild = env.BRANCH_NAME?.trim() ? "*/${env.BRANCH_NAME.trim()}" : fallback
           checkout([
             $class: 'GitSCM',
             branches: [[name: branchToBuild]],                 // 트리거된 브랜치 체크아웃
