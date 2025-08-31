@@ -29,6 +29,9 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     @Query("SELECT p FROM Post p JOIN FETCH p.author WHERE p.id = :id")
     Optional<Post> findByIdWithAuthor(@Param("id") Long id);
     
+    @Query("SELECT DISTINCT p FROM Post p JOIN FETCH p.author LEFT JOIN FETCH p.images WHERE p.id = :id")
+    Optional<Post> findByIdWithAuthorAndImages(@Param("id") Long id);
+    
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Post p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
     int incrementViews(@Param("id") Long id);
@@ -37,28 +40,20 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     
     // 추천수 기반 필터링 쿼리들
     @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes ORDER BY p.likeCount DESC, p.createdAt DESC")
+    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes ORDER BY p.createdAt DESC")
     Page<Post> findByLikeCountGreaterThanEqual(@Param("minLikes") long minLikes, Pageable pageable);
     
     @EntityGraph(attributePaths = "author") 
-    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes AND LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY p.likeCount DESC, p.createdAt DESC")
+    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes AND LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY p.createdAt DESC")
     Page<Post> findByLikeCountGreaterThanEqualAndTitleContaining(@Param("minLikes") long minLikes, @Param("query") String query, Pageable pageable);
     
     @EntityGraph(attributePaths = "author") 
-    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content as string)) LIKE LOWER(CONCAT('%', :query, '%'))) ORDER BY p.likeCount DESC, p.createdAt DESC")
+    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content as string)) LIKE LOWER(CONCAT('%', :query, '%'))) ORDER BY p.createdAt DESC")
     Page<Post> findByLikeCountGreaterThanEqualAndTitleOrContentContaining(@Param("minLikes") long minLikes, @Param("query") String query, Pageable pageable);
     
-    // 최근 N일 내 추천순 정렬 (서브쿼리 방식)
+    // 최근 N일 내 추천순 정렬 (like_count 컬럼 사용)
     @EntityGraph(attributePaths = "author")
-    @Query("""
-        SELECT p FROM Post p 
-        WHERE p.createdAt >= :from 
-        ORDER BY (
-            SELECT COUNT(pl.id) 
-            FROM PostLike pl 
-            WHERE pl.post = p
-        ) DESC, p.createdAt DESC
-        """)
+    @Query("SELECT p FROM Post p WHERE p.createdAt >= :from ORDER BY p.likeCount DESC, p.createdAt DESC")
     Page<Post> findRecentOrderByLikes(@Param("from") LocalDateTime from, Pageable pageable);
     
     // BoardType별 게시글 조회
@@ -67,7 +62,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     
     // BoardType별 제목 검색
     @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE p.boardType = :boardType AND LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%'))")
+    @Query("SELECT p FROM Post p WHERE p.boardType = :boardType AND LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY p.createdAt DESC")
     Page<Post> findByBoardTypeAndTitleContainingIgnoreCase(
             @Param("boardType") BoardType boardType, 
             @Param("query") String query, 
@@ -76,7 +71,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     
     // BoardType별 제목 또는 내용 검색
     @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE p.boardType = :boardType AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content as string)) LIKE LOWER(CONCAT('%', :query, '%')))")
+    @Query("SELECT p FROM Post p WHERE p.boardType = :boardType AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content AS string)) LIKE LOWER(CONCAT('%', :query, '%'))) ORDER BY p.createdAt DESC")
     Page<Post> findByBoardTypeAndTitleOrContentContainingIgnoreCase(
             @Param("boardType") BoardType boardType, 
             @Param("query") String query, 

@@ -21,7 +21,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -52,77 +51,6 @@ public class CommentController {
     }
 
     /**
-     * @deprecated 최적화되지 않은 API입니다. 대신 {@link #getCommentsByPost(Long, Pageable)}를 사용하세요.
-     */
-    @Deprecated(forRemoval = true)
-    @GetMapping("/api/comments")
-    public ResponseEntity<List<CommentRes>> getByPost(@RequestParam Long postId) {
-        List<CommentRes> comments = commentService.getByPost(postId).stream()
-                .map(CommentRes::of)
-                .toList();
-        return ResponseEntity.ok(comments);
-    }
-    
-    /**
-     * @deprecated 최적화되지 않은 API입니다. 대신 {@link #getCommentsByPost(Long, Pageable)}를 사용하세요.
-     */
-    @Deprecated(forRemoval = true)
-    @GetMapping("/api/comments/paged")
-    public ResponseEntity<Map<String, Object>> getByPostPaged(
-            @RequestParam Long postId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
-    ) {
-        // 안전한 정렬 적용
-        Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
-        
-        Page<Comment> commentPage = commentService.getByPostWithPaging(postId, safePageable);
-        
-        Map<String, Object> response = Map.of(
-            "content", commentPage.getContent().stream().map(CommentRes::of).toList(),
-            "pageInfo", Map.of(
-                "page", commentPage.getNumber(),
-                "size", commentPage.getSize(),
-                "totalElements", commentPage.getTotalElements(),
-                "totalPages", commentPage.getTotalPages(),
-                "first", commentPage.isFirst(),
-                "last", commentPage.isLast()
-            )
-        );
-        
-        return ResponseEntity.ok(response);
-    }
-    
-    /**
-     * @deprecated 최적화되지 않은 API입니다. 대신 {@link #getCommentsByPost(Long, Pageable)}를 사용하세요.
-     */
-    @Deprecated(forRemoval = true)
-    @GetMapping("/api/comments/optimized")
-    public ResponseEntity<Map<String, Object>> getOptimizedByPostPaged(
-            @RequestParam Long postId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
-    ) {
-        // 안전한 정렬 적용
-        Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
-        
-        Page<CommentProjection> projectionPage = 
-                commentService.getProjectionsByPostWithPaging(postId, safePageable);
-        
-        Map<String, Object> response = Map.of(
-            "content", projectionPage.getContent().stream().map(CommentRes::from).toList(),
-            "pageInfo", Map.of(
-                "page", projectionPage.getNumber(),
-                "size", projectionPage.getSize(),
-                "totalElements", projectionPage.getTotalElements(),
-                "totalPages", projectionPage.getTotalPages(),
-                "first", projectionPage.isFirst(),
-                "last", projectionPage.isLast()
-            )
-        );
-        
-        return ResponseEntity.ok(response);
-    }
-
-    /**
      * 게시글에 달린 댓글을 최적화된 방식으로 페이징하여 조회
      * - N+1 쿼리 문제가 해결된 API
      * 
@@ -133,7 +61,7 @@ public class CommentController {
     @GetMapping("/api/posts/{postId}/comments")
     public ResponseEntity<Map<String, Object>> getCommentsByPost(
             @PathVariable Long postId,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         // 안전한 정렬 적용
         Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);

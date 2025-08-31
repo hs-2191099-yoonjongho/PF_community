@@ -8,16 +8,15 @@ spring:
       connection-init-sql: "SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci"
   jpa:
     hibernate:
-      # 변경: update -> none (Flyway 일관성 유지)
-      ddl-auto: none
+      # 로컬 개발환경: Flyway 대신 JPA DDL 자동 생성 사용
+      ddl-auto: create-drop
     properties:
       hibernate:
         format_sql: true
         default_batch_fetch_size: 100
   flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
+    # 로컬 개발환경에서는 Flyway 비활성화
+    enabled: false
 
 logging:
   level:
@@ -51,4 +50,5 @@ app:
     # 8080 포트로 통일 (docker-compose.yml과 일치)
     public-base-url: http://localhost:8080/files
     local:
-      base-path: uploads
+      # 테스트용 임시 디렉토리 사용 (시스템 임시 디렉토리 내 하위 폴더)
+      base-path: ${java.io.tmpdir}/community-test-uploads

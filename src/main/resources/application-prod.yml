@@ -32,7 +32,8 @@ spring:
 
 logging:
   level:
-    root: WARN
+    root: INFO
+    com.example.community: DEBUG
     org.hibernate.SQL: off
     org.hibernate.orm.jdbc.bind: off
 
@@ -77,8 +78,5 @@ app:
     provider: local
     public-base-url: ${PUBLIC_BASE_URL}
     local:
+      # 프로덕션 환경에서는 컨테이너 내부 경로를 사용
       base-path: /app/uploads
-    s3:
-      bucket: ${S3_BUCKET:}
-      region: ap-northeast-2
-      base-url: ${S3_BASE_URL:}

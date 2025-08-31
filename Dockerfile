@@ -17,6 +17,9 @@ RUN apt-get update \
 		&& rm -rf /var/lib/apt/lists/* \
 		&& useradd -m -u 10001 appuser \
 		&& mkdir -p /app/uploads \
+		&& mkdir -p /app/uploads/posts \
+		&& chmod -R 777 /app/uploads \
+		&& chmod -R 777 /app \
 		&& chown -R appuser:appuser /app
 USER appuser
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \

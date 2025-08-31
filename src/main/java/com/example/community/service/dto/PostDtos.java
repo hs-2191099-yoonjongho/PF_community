@@ -13,7 +13,7 @@ public class PostDtos {
             @NotBlank @Size(max = 200) String title,
             @NotBlank String content,
             @NotNull BoardType boardType,
-            List<ImageMeta> images
+            List<String> imageKeys // ImageMeta 대신 String 리스트로 변경
     ) {
         /**
          * 자유게시판(FREE) 타입으로 게시글 생성 DTO 생성
@@ -33,6 +33,6 @@ public class PostDtos {
     public record Update(
             @NotBlank @Size(max = 200) String title,
             @NotBlank String content,
-            List<ImageMeta> images
+            List<String> imageKeys // ImageMeta 대신 String 리스트로 변경
     ) {}
 }
