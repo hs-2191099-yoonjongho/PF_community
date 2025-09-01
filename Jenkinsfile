@@ -11,7 +11,7 @@ pipeline {
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: '빌드할 브랜치(단일 파이프라인일 때). 예: main, develop')
-    booleanParam(name: 'DEPLOY', defaultValue: false, description: ' 체크하면 이번 빌드에서 배포까지 실행')
+    booleanParam(name: 'DEPLOY', defaultValue: false, description: ' 체크하면 이번 빌드에서 바로 배포까지 진행 (승인 없음)')
 
     // AWS/ECR
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID (12자리)')
@@ -21,11 +21,10 @@ pipeline {
 
     // 운영 배포 타겟/파라미터 스토어
     string(name: 'PROD_EC2_INSTANCE_ID', defaultValue: '', description: 'Production EC2 인스턴스 ID')
-    string(name: 'PROD_SSM_PREFIX', defaultValue: '/community-portfolio/prod', description: 'SSM 파라미터 프리픽스')
+    string(name: 'PROD_SSM_PREFIX', defaultValue: '/community-portfolio/dev', description: 'SSM 파라미터 프리픽스')
 
     // 빌드/운영 승인 옵션
-    booleanParam(name: 'RUN_TESTS_ON_DEPLOY', defaultValue: false, description: '배포 시에도 테스트 실행')
-    booleanParam(name: 'REQUIRE_PROD_APPROVAL', defaultValue: true, description: '운영 배포 전 수동 승인 필요')
+    booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: ' 체크하면 테스트를 실행하지 않음')
   }
 
   environment {
@@ -79,7 +78,7 @@ pipeline {
           echo "Current branch (info only): ${cur}"
 
           env.DEPLOY_ENABLED = params.DEPLOY ? 'true' : 'false'
-          env.DEPLOY_TARGET  = params.DEPLOY ? 'prod' : 'none'
+          env.DEPLOY_TARGET  = params.DEPLOY ? 'dev' : 'none'
 
           env.DEPLOY_EC2_INSTANCE_ID = params.DEPLOY ? (params.PROD_EC2_INSTANCE_ID?.trim()) : ''
           env.SSM_PREFIX             = params.DEPLOY ? (params.PROD_SSM_PREFIX?.trim())       : ''
@@ -102,9 +101,9 @@ pipeline {
       steps {
         sh './gradlew --version'
         script {
-          // 배포 빌드인데 테스트는 안 돌리고 싶으면 RUN_TESTS_ON_DEPLOY=false
-          def shouldSkip = (env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY)
-          echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, RUN_TESTS_ON_DEPLOY=${params.RUN_TESTS_ON_DEPLOY})"
+          // 테스트 스킵 체크박스로 테스트 실행 여부 결정
+          def shouldSkip = params.SKIP_TESTS
+          echo "Build: shouldSkipTests=${shouldSkip} (SKIP_TESTS=${params.SKIP_TESTS})"
 
           if (shouldSkip) {
             sh './gradlew --no-daemon clean assemble -x test'
@@ -117,7 +116,7 @@ pipeline {
     }
 
     stage('Test Reports') {
-      when { expression { return !(env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY) } }
+      when { expression { return !params.SKIP_TESTS } }
       steps {
         junit allowEmptyResults: true, testResults: 'build/test-results/test/**/*.xml'
         archiveArtifacts allowEmptyArchive: true, artifacts: 'build/reports/tests/test/**'
@@ -200,14 +199,7 @@ pipeline {
       }
     }
 
-    stage('Approve Production Deploy') {
-      when { expression { return env.DEPLOY_TARGET == 'prod' && params.REQUIRE_PROD_APPROVAL } }
-      steps {
-        timeout(time: 10, unit: 'MINUTES') {
-          input message: '운영 배포를 진행할까요?', ok: 'Deploy'
-        }
-      }
-    }
+    // 승인 단계 제거 - 배포 체크박스를 선택하면 바로 배포됨
 
     stage('Deploy to EC2 (via docker-compose)') {
       when {
@@ -530,7 +522,7 @@ EOF
         if (env.DEPLOY_ENABLED == 'true') {
           echo 'Build and deployment succeeded. Application is now running on EC2.'
         } else {
-          echo 'Build succeeded (CI only). Deployment was skipped by conditions.'
+          echo 'Build succeeded (CI only). 배포를 원하면 DEPLOY 체크박스를 선택하세요.'
         }
       }
     }
