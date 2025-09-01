@@ -13,11 +13,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @org.springframework.test.context.ActiveProfiles("test")
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-        "ALLOWED_ORIGINS=http://allowed.example"
+        "ALLOWED_ORIGINS=http://allowed.example",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.flyway.enabled=false",
+        "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"
 })
 class CorsPolicyTest {
 

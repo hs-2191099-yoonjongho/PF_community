@@ -1,22 +1,24 @@
 spring:
   datasource:
-    # localhost 사용으로 변경 (Docker 환경이 아닌 경우에도 일관된 실행 가능)
-    url: ${DB_URL:jdbc:mysql://localhost:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:1234}
-    hikari:
-      connection-init-sql: "SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+    # H2 인메모리 데이터베이스 사용 (CI 환경에서 안정적인 테스트용)
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      # 로컬 개발환경: Flyway 대신 JPA DDL 자동 생성 사용
       ddl-auto: create-drop
     properties:
       hibernate:
         format_sql: true
         default_batch_fetch_size: 100
+        dialect: org.hibernate.dialect.H2Dialect
   flyway:
-    # 로컬 개발환경에서는 Flyway 비활성화
+    # 테스트 환경에서는 Flyway 비활성화
     enabled: false
+  h2:
+    console:
+      enabled: true
 
 logging:
   level:

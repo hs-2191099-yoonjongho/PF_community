@@ -130,18 +130,15 @@ pipeline {
             def propFile = "system.props"
             def propContent = ""
             
-            // 표준 spring.datasource.* 우선, 없으면 구(Deprecated) 키를 spring.*로 매핑
-            def dsUrl = params.TEST_SPRING_DATASOURCE_URL?.trim() ?: params.TEST_DB_URL?.trim()
-            def dsUser = params.TEST_SPRING_DATASOURCE_USERNAME?.trim() ?: params.TEST_DB_USERNAME?.trim()
-            def dsPass = params.TEST_SPRING_DATASOURCE_PASSWORD?.trim() ?: params.TEST_DB_PASSWORD?.trim()
+            // H2 데이터베이스 사용 (CI 환경에서 안정적인 테스트를 위해)
+            propContent += "spring.datasource.url=jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1\n"
+            propContent += "spring.datasource.username=sa\n"
+            propContent += "spring.datasource.password=\n"
+            propContent += "spring.datasource.driver-class-name=org.h2.Driver\n"
             
-            if (dsUrl)  { propContent += "spring.datasource.url=${dsUrl}\n" }
-            if (dsUser) { propContent += "spring.datasource.username=${dsUser}\n" }
-            if (dsPass) { propContent += "spring.datasource.password=${dsPass}\n" }
-            
-            // Hibernate Dialect/Flyway for MySQL tests
-            propContent += "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect\n"
-            propContent += "spring.flyway.enabled=true\n"
+            // H2 설정
+            propContent += "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect\n"
+            propContent += "spring.flyway.enabled=false\n"
             propContent += "spring.profiles.active=test\n"
             
             // jwt/refresh/public-base-url 테스트 값
