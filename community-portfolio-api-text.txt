@@ -1,0 +1,261 @@
+# Community Portfolio API 가이드
+
+## 인증 API (AuthController)
+
+### 1. 회원가입
+```
+POST http://localhost:8080/api/auth/signup
+Content-Type: application/json
+Origin: http://localhost:3000
+
+{
+  "username": "newuser2025",
+  "email": "newuser2025@test.com",
+  "password": "NewPass123!@#"
+}
+```
+
+### 2. 로그인
+```
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+Origin: http://localhost:3000
+
+{
+  "email": "newuser2025@test.com",
+  "password": "NewPass123!@#"
+}
+```
+
+### 3. 토큰 갱신
+```
+POST http://localhost:8080/api/auth/refresh
+Origin: http://localhost:3000
+```
+
+### 4. 로그아웃
+```
+POST http://localhost:8080/api/auth/logout
+Origin: http://localhost:3000
+```
+
+## 회원 API (MemberController)
+
+### 1. 내 정보 조회
+```
+GET http://localhost:8080/api/members/me
+Authorization: Bearer {액세스토큰}
+```
+
+### 2. 사용자명 변경
+```
+PATCH http://localhost:8080/api/members/me/username
+Content-Type: application/json
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+{
+  "username": "변경할사용자명"
+}
+```
+
+### 3. 비밀번호 변경
+```
+PATCH http://localhost:8080/api/members/me/password
+Content-Type: application/json
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+{
+  "currentPassword": "현재비밀번호",
+  "newPassword": "새비밀번호",
+  "newPasswordConfirm": "새비밀번호확인"
+}
+```
+
+### 4. 회원 탈퇴
+```
+DELETE http://localhost:8080/api/members/me
+Content-Type: application/json
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+{
+  "password": "현재비밀번호"
+}
+```
+
+## 파일 API (FileController)
+
+### 1. 게시글 이미지 업로드
+```
+POST http://localhost:8080/api/files/posts/images
+Content-Type: multipart/form-data
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+FormData:
+- files: [파일1, 파일2, ...]
+```
+
+### 2. 게시글 이미지 삭제
+```
+DELETE http://localhost:8080/api/files/posts/images?key={이미지키}
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+```
+
+## 게시글 API (PostController)
+
+### 1. 게시글 생성
+```
+POST http://localhost:8080/api/posts
+Content-Type: application/json
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+{
+  "title": "게시글 제목",
+  "content": "게시글 내용",
+  "boardType": "FREE",
+  "imageKeys": ["이미지키1", "이미지키2"]
+}
+```
+
+### 2. 게시글 목록 조회
+```
+GET http://localhost:8080/api/posts?page=0&size=10&sort=createdAt,desc&q=검색어
+```
+
+### 3. 게시글 상세 조회
+```
+GET http://localhost:8080/api/posts/{게시글ID}
+```
+
+### 4. 게시글 수정
+```
+PUT http://localhost:8080/api/posts/{게시글ID}
+Content-Type: application/json
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+{
+  "title": "수정된 제목",
+  "content": "수정된 내용",
+  "imageKeys": ["이미지키1"]
+}
+```
+
+### 5. 게시글 삭제
+```
+DELETE http://localhost:8080/api/posts/{게시글ID}
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+```
+
+### 6. 게시글 좋아요 토글
+```
+POST http://localhost:8080/api/posts/{게시글ID}/like
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+```
+
+### 7. 게시글 좋아요 상태 조회
+```
+GET http://localhost:8080/api/posts/{게시글ID}/like
+Authorization: Bearer {액세스토큰}
+```
+
+### 8. 인기 게시글 조회 (추천 10개 이상)
+```
+GET http://localhost:8080/api/posts/popular?page=0&size=10
+```
+
+### 9. 베스트 게시글 조회 (추천 30개 이상)
+```
+GET http://localhost:8080/api/posts/best?page=0&size=10
+```
+
+### 10. 최근 추천 게시글 조회
+```
+GET http://localhost:8080/api/posts/recommended?days=7&page=0&size=10
+```
+
+### 11. 게시판별 게시글 조회
+```
+GET http://localhost:8080/api/posts/board/{게시판타입}?q=검색어&page=0&size=10
+```
+- 게시판타입: FREE, NOTICE 등
+
+### 12. 추천수 기반 필터링 게시글 목록
+```
+GET http://localhost:8080/api/posts/filter?q=검색어&minLikes=30&page=0&size=10
+```
+
+## 댓글 API (CommentController)
+
+### 1. 댓글 작성
+```
+POST http://localhost:8080/api/posts/{게시글ID}/comments
+Content-Type: application/json
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+
+{
+  "content": "댓글 내용"
+}
+```
+
+### 2. 댓글 목록 조회 (권장 방식)
+```
+GET http://localhost:8080/api/posts/{게시글ID}/comments?page=0&size=20&sort=createdAt,asc
+```
+
+### 3. 댓글 삭제
+```
+DELETE http://localhost:8080/api/comments/{댓글ID}
+Authorization: Bearer {액세스토큰}
+Origin: http://localhost:3000
+```
+-------------------------------------------------------------------
+### 4. 댓글 목록 조회 (Deprecated - 더 이상 사용하지 않음)
+```
+GET http://localhost:8080/api/comments?postId={게시글ID}
+```
+
+### 5. 페이징된 댓글 목록 조회 (Deprecated - 더 이상 사용하지 않음)
+```
+GET http://localhost:8080/api/comments/paged?postId={게시글ID}&page=0&size=20&sort=createdAt,asc
+```
+
+### 6. 최적화된 페이징 댓글 목록 조회 (Deprecated - 더 이상 사용하지 않음)
+```
+GET http://localhost:8080/api/comments/optimized?postId={게시글ID}&page=0&size=20&sort=createdAt,asc
+```
+
+## 주요 헤더 정보
+
+1. 인증 헤더: 로그인 후 받은 액세스 토큰을 사용
+   ```
+   Authorization: Bearer {액세스토큰}
+   ```
+
+2. CORS 헤더: 모든 요청에 Origin 헤더 필요
+   ```
+   Origin: http://localhost:3000
+   ```
+
+3. 컨텐츠 타입
+   - JSON 요청: `Content-Type: application/json`
+   - 파일 업로드: `Content-Type: multipart/form-data`
+
+## 게시판 타입
+- FREE: 자유게시판
+- NOTICE: 공지사항
+- QNA: 질문과 답변
+- GALLERY: 갤러리
+
+## 페이징 및 정렬 파라미터
+- page: 페이지 번호 (0부터 시작)
+- size: 페이지 크기
+- sort: 정렬 필드,정렬방향 (예: createdAt,desc)

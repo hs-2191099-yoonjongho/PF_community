@@ -22,6 +22,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Arrays;
+
+import java.time.Duration;
 
 @RestController
 @RequiredArgsConstructor
@@ -40,6 +44,16 @@ public class AuthController {
     @Value("${refresh.cookie.secure}") private boolean cookieSecure; // dev=false, prod=true
     @Value("${refresh.cookie.same-site}") private String sameSite;   // "Lax" | "None" | "Strict"
     @Value("${refresh.cookie.domain:}") private String cookieDomain; // ★ 선택(없으면 빈 문자열)
+    @Value("${ALLOWED_ORIGINS:http://localhost:3000}") private String allowedOriginsStr;
+    
+    // 허용된 Origin 목록 가져오기
+    private List<String> getAllowedOrigins() {
+        return Arrays.stream(allowedOriginsStr.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
+    }
 
     /* 회원가입 */
     @PostMapping("/signup")
@@ -91,6 +105,14 @@ public class AuthController {
         if (xrw == null || !"XMLHttpRequest".equalsIgnoreCase(xrw)) {
             return ResponseEntity.status(403).build();
         }
+        
+        // Origin 헤더 검증
+        String origin = req.getHeader("Origin");
+        List<String> allowedOrigins = getAllowedOrigins();
+        if (origin == null || !allowedOrigins.contains(origin)) {
+            return ResponseEntity.status(403).body(new TokenRes("Invalid origin"));
+        }
+        
     // 1) 쿠키에서 refresh 읽기 (설정된 이름으로)
         String refreshRaw = readCookie(req, cookieName);              // ★ 이름 일관화
         if (refreshRaw == null || refreshRaw.isBlank())
@@ -123,6 +145,13 @@ public class AuthController {
     /* 로그아웃: Refresh 폐기 + 쿠키 삭제(동일 속성 + Max-Age=0) */
     @PostMapping("/logout")
     public ResponseEntity<String> logout(HttpServletRequest req) {   // ★ @CookieValue 제거
+        // Origin 헤더 검증
+        String origin = req.getHeader("Origin");
+        List<String> allowedOrigins = getAllowedOrigins();
+        if (origin == null || !allowedOrigins.contains(origin)) {
+            return ResponseEntity.status(403).body("Invalid origin");
+        }
+        
         String refreshRaw = readCookie(req, cookieName);             // ★ 이름 일관화
         if (refreshRaw != null && !refreshRaw.isBlank()) {
             refreshTokenService.revoke(refreshRaw);
