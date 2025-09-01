@@ -10,7 +10,7 @@ pipeline {
 
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
-  string(name: 'GIT_BRANCH', defaultValue: 'branch(v7)', description: '빌드할 브랜치(멀티브랜치가 아닌 단일 파이프라인일 때 사용). 예: main, develop, branch(v7)')
+  string(name: 'GIT_BRANCH', defaultValue: 'main', description: '빌드할 브랜치(멀티브랜치가 아닌 단일 파이프라인일 때 사용). 예: main, develop, branch(v7)')
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
     string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
   // 배포 타겟별 자원
@@ -50,16 +50,20 @@ pipeline {
           if (params.GIT_CREDENTIALS_ID?.trim()) {
             remote.credentialsId = params.GIT_CREDENTIALS_ID.trim()
           }
-          // 멀티브랜치 파이프라인이면 env.BRANCH_NAME 제공됨. 없으면 파라미터 GIT_BRANCH를 폴백으로 사용
-          def fallback = params.GIT_BRANCH?.trim() ? "*/${params.GIT_BRANCH.trim()}" : '*/main'
-          def branchToBuild = env.BRANCH_NAME?.trim() ? "*/${env.BRANCH_NAME.trim()}" : fallback
+          
+          // 브랜치 결정: BRANCH_NAME(멀티브랜치) 또는 GIT_BRANCH(파라미터) 또는 기본 'main'
+          def resolvedBranch = (env.BRANCH_NAME?.trim()) ?: (params.GIT_BRANCH?.trim()) ?: 'main'
+          echo "Checkout target branch: ${resolvedBranch}"
+
           checkout([
             $class: 'GitSCM',
-            branches: [[name: branchToBuild]],                 // 트리거된 브랜치 체크아웃
+            branches: [[name: "*/${resolvedBranch}"]],
             userRemoteConfigs: [remote],
-            extensions: [[
-              $class: 'CloneOption', shallow: true, depth: 1, noTags: true, timeout: 20
-            ]]
+            extensions: [
+              [$class: 'CloneOption', shallow: true, depth: 1, noTags: true, timeout: 20],
+              // 로컬 브랜치로 체크아웃하여 detached HEAD 방지
+              [$class: 'LocalBranch', localBranch: "${resolvedBranch}"]
+            ]
           ])
         }
       }
@@ -68,11 +72,39 @@ pipeline {
     stage('Init (branch → env mapping)') {
       steps {
         script {
-          // 브랜치 결정
-          def detected = env.BRANCH_NAME?.trim()
-          if (!detected) {
-            detected = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+          // 브랜치 결정 - 이미 Checkout 단계에서 로컬 브랜치로 체크아웃했으므로 간단히 처리
+          def detected = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+          echo "Current local branch: ${detected}"
+          
+          // 만약 여전히 HEAD라면 (LocalBranch 확장이 작동하지 않았을 경우) 추가 처리
+          if (detected == 'HEAD') {
+            echo "WARNING: Still in detached HEAD state despite LocalBranch extension"
+            
+            // 원격 저장소 정보 업데이트 
+            sh "git remote update origin --prune"
+            
+            // 현재 커밋 해시 가져오기
+            def commitHash = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+            
+            // 이 커밋을 포함하는 원격 브랜치 확인
+            def remoteBranches = sh(script: "git branch -r --contains ${commitHash}", returnStdout: true).trim()
+            echo "Remote branches containing current commit: ${remoteBranches}"
+            
+            // 브랜치 우선순위: main > master > 파라미터 > HEAD
+            if (remoteBranches.contains('origin/main')) {
+              detected = 'main'
+              echo "Detected as main branch from commit history"
+            } else if (remoteBranches.contains('origin/master')) {
+              detected = 'master'
+              echo "Detected as master branch from commit history"
+            } else if (params.GIT_BRANCH?.trim()) {
+              detected = params.GIT_BRANCH.trim()
+              echo "Using parameter GIT_BRANCH: ${detected}"
+            } else {
+              echo "Could not determine branch from commit history or parameters, staying with HEAD"
+            }
           }
+          
           env.GIT_BRANCH_NAME = detected
 
           // 기본값
@@ -81,7 +113,9 @@ pipeline {
           env.DEPLOY_EC2_INSTANCE_ID = ''
           env.IMAGE_CHANNEL_TAG = ''
 
-          if (detected == 'main' || detected == 'master') {
+          // 브랜치가 main/master거나, GIT_BRANCH 파라미터가 main/master인 경우에도 배포 활성화
+          if (detected == 'main' || detected == 'master' || 
+              params.GIT_BRANCH?.trim() == 'main' || params.GIT_BRANCH?.trim() == 'master') {
             env.DEPLOY_TARGET = 'prod'
             env.DEPLOY_ENABLED = 'true'
             env.DEPLOY_EC2_INSTANCE_ID = params.PROD_EC2_INSTANCE_ID?.trim()
@@ -578,7 +612,13 @@ EOF
       echo 'Build or deployment failed. Check logs and test reports.'
     }
     success {
-      echo 'Build and deployment succeeded. Application is now running on EC2.'
+      script {
+        if (env.DEPLOY_ENABLED == 'true') {
+          echo 'Build and deployment succeeded. Application is now running on EC2.'
+        } else {
+          echo 'Build succeeded (CI only). Deployment was skipped by conditions.'
+        }
+      }
     }
   }
 }
