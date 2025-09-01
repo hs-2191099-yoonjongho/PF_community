@@ -11,7 +11,6 @@ pipeline {
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
   string(name: 'GIT_BRANCH', defaultValue: 'branch(v7)', description: '빌드할 브랜치(멀티브랜치가 아닌 단일 파이프라인일 때 사용). 예: main, develop, branch(v7)')
-  booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip tests (default=false). CI는 기본적으로 테스트를 실행합니다.')
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
     string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
   // 배포 타겟별 자원
@@ -23,8 +22,8 @@ pipeline {
   booleanParam(name: 'RUN_TESTS_ON_DEPLOY', defaultValue: false, description: '배포 브랜치(main/master)에서도 테스트를 실행할지 여부(기본: 실행 안 함)')
   booleanParam(name: 'REQUIRE_PROD_APPROVAL', defaultValue: true, description: '운영 배포 전 수동 승인 필요 여부')
 
-  // 테스트 스킵 옵션 (필요 시 사용)
-  booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '테스트 스킵 (기본값: 실행함)')
+  // 배포 브랜치에서만 필요한 테스트 관련 설정
+  
   }
 
   environment {
@@ -108,8 +107,8 @@ pipeline {
         sh './gradlew --version'
         script {
           // 기본: CI는 테스트 수행, 배포 브랜치(main/master)는 기본 스킵. 필요시 RUN_TESTS_ON_DEPLOY=true로 강제 수행.
-          def shouldSkip = params.SKIP_TESTS || (env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY)
-          echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, SKIP_TESTS=${params.SKIP_TESTS}, RUN_TESTS_ON_DEPLOY=${params.RUN_TESTS_ON_DEPLOY})"
+          def shouldSkip = (env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY)
+          echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, RUN_TESTS_ON_DEPLOY=${params.RUN_TESTS_ON_DEPLOY})"
 
           if (shouldSkip) {
             sh './gradlew --no-daemon clean assemble -x test'
@@ -124,7 +123,7 @@ pipeline {
     }
 
   stage('Test Reports') {
-  when { expression { return !params.SKIP_TESTS && !(env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY) } }
+  when { expression { return !(env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY) } }
       steps {
         junit allowEmptyResults: true, testResults: 'build/test-results/test/**/*.xml'
   archiveArtifacts allowEmptyArchive: true, artifacts: 'build/reports/tests/test/**'
