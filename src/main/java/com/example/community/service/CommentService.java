@@ -52,6 +52,7 @@ public class CommentService {
         return comments.findProjectionsByPostId(postId, safePageable);
     }
 
+
     @Transactional
     public void delete(Long commentId) { 
         if (!comments.existsById(commentId)) {

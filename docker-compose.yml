@@ -16,6 +16,10 @@ services:
       REFRESH_COOKIE_SECURE: "${REFRESH_COOKIE_SECURE}"
       REFRESH_COOKIE_SAME_SITE: "${REFRESH_COOKIE_SAME_SITE}"
       REFRESH_COOKIE_DOMAIN: "${REFRESH_COOKIE_DOMAIN}"
+      # Admin seeding (optional): set to enable Flyway V10 admin seed
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH:-}"
       S3_BUCKET: "${S3_BUCKET}"
       SERVER_PORT: "${SERVER_PORT:-8080}"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseContainerSupport"

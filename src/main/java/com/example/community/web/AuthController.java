@@ -86,7 +86,12 @@ public class AuthController {
     /* 리프레시: 새 Access + (회전된) 새 Refresh 쿠키 */
     @PostMapping("/refresh")
     public ResponseEntity<TokenRes> refresh(HttpServletRequest req) { // ★ @CookieValue → Request 직접 읽기
-        // 1) 쿠키에서 refresh 읽기 (설정된 이름으로)
+        // CSRF 완화: 커스텀 헤더 강제(X-Requested-With)
+        String xrw = req.getHeader("X-Requested-With");
+        if (xrw == null || !"XMLHttpRequest".equalsIgnoreCase(xrw)) {
+            return ResponseEntity.status(403).build();
+        }
+    // 1) 쿠키에서 refresh 읽기 (설정된 이름으로)
         String refreshRaw = readCookie(req, cookieName);              // ★ 이름 일관화
         if (refreshRaw == null || refreshRaw.isBlank())
             return ResponseEntity.status(401).build();

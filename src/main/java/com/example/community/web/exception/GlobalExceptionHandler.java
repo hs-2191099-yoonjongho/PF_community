@@ -16,6 +16,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -38,6 +39,27 @@ public class GlobalExceptionHandler {
         m.put("status", status.value());
         m.put("code", code);
         return m;
+    }
+
+    /**
+     * Spring Security의 메서드 보안(PreAuthorize) 거부 예외 처리
+     * 기본적으로 403 Forbidden을 반환한다.
+     */
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthorizationDenied(AuthorizationDeniedException e) {
+        Map<String, Object> body = base(HttpStatus.FORBIDDEN, "access_denied");
+        body.put("message", "해당 리소스에 대한 권한이 없습니다");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    /**
+     * Spring Security의 AccessDeniedException 처리 (필터/인터셉터 단계)
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleSpringAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+        Map<String, Object> body = base(HttpStatus.FORBIDDEN, "access_denied");
+        body.put("message", "해당 리소스에 대한 권한이 없습니다");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     /**

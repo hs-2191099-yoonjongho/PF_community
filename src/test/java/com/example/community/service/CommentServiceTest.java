@@ -17,9 +17,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import com.example.community.repository.dto.CommentProjection;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,27 +80,29 @@ class CommentServiceTest {
                 .build();
     }
 
-    @Test
-    @DisplayName("게시글 ID로 댓글 페이징 조회")
-    void getByPostWithPaging() {
-        // given
-        Pageable pageable = PageRequest.of(0, 10);
-        when(postRepository.existsById(post.getId())).thenReturn(true);
-        
-        List<Comment> comments = List.of(comment1, comment2);
-        Page<Comment> commentPage = new PageImpl<>(comments, pageable, comments.size());
-        
-        when(commentRepository.findByPostId(eq(post.getId()), any(Pageable.class)))
-                .thenReturn(commentPage);
+        @Test
+        @DisplayName("게시글 ID로 댓글 프로젝션 페이징 조회")
+        void getProjectionsByPostWithPaging() {
+                // given
+                Pageable pageable = PageRequest.of(0, 10);
+                when(postRepository.existsById(post.getId())).thenReturn(true);
 
-        // when
-        Page<Comment> result = commentService.getByPostWithPaging(post.getId(), pageable);
+                CommentProjection.MemberDto authorDto = new CommentProjection.MemberDto(author.getId(), author.getUsername());
+                CommentProjection p1 = new CommentProjection(comment1.getId(), comment1.getContent(), comment1.getCreatedAt(), authorDto, post.getId());
+                CommentProjection p2 = new CommentProjection(comment2.getId(), comment2.getContent(), comment2.getCreatedAt(), authorDto, post.getId());
+                Page<CommentProjection> projectionPage = new PageImpl<>(List.of(p1, p2), pageable, 2);
 
-        // then
-        assertThat(result).isNotNull();
-        assertThat(result.getContent()).hasSize(2);
-        assertThat(result.getContent().get(0).getContent()).isEqualTo("첫 번째 댓글");
-        assertThat(result.getContent().get(1).getContent()).isEqualTo("두 번째 댓글");
-        assertThat(result.getTotalElements()).isEqualTo(2);
-    }
+                when(commentRepository.findProjectionsByPostId(eq(post.getId()), any(Pageable.class)))
+                                .thenReturn(projectionPage);
+
+                // when
+                Page<CommentProjection> result = commentService.getProjectionsByPostWithPaging(post.getId(), pageable);
+
+                // then
+                assertThat(result).isNotNull();
+                assertThat(result.getContent()).hasSize(2);
+                assertThat(result.getContent().get(0).content()).isEqualTo("첫 번째 댓글");
+                assertThat(result.getContent().get(1).content()).isEqualTo("두 번째 댓글");
+                assertThat(result.getTotalElements()).isEqualTo(2);
+        }
 }

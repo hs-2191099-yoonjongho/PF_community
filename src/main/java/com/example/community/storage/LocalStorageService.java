@@ -1,6 +1,7 @@
 package com.example.community.storage;
 
 import com.example.community.common.FilePolicy;
+import com.example.community.util.FileTypeValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -18,7 +19,7 @@ public class LocalStorageService implements Storage {
 
     @Value("${app.storage.local.base-path:uploads}")
     private String basePath;
-    @Value("${app.storage.public-base-url}")
+    @Value("${app.public-base-url}")
     private String publicBaseUrl;
     
     private Path base;
@@ -35,23 +36,9 @@ public class LocalStorageService implements Storage {
                 System.out.println("스토리지 기본 경로 이미 존재함: " + base);
             }
             
-            // 디렉토리 쓰기 권한 확인
+            // 디렉토리 쓰기 권한 확인 (권한 변경은 런타임에서 시도하지 않음)
             if (!Files.isWritable(base)) {
-                System.err.println("경고: 스토리지 기본 경로에 쓰기 권한이 없습니다: " + base);
-                
-                // 권한 설정 시도 (Linux/Unix 환경에서만 작동)
-                try {
-                    String absolutePath = base.toString();
-                    Process process = Runtime.getRuntime().exec(new String[] { "chmod", "-R", "777", absolutePath });
-                    int exitCode = process.waitFor();
-                    if (exitCode == 0) {
-                        System.out.println("스토리지 기본 경로 권한 설정 성공: " + base);
-                    } else {
-                        System.err.println("스토리지 기본 경로 권한 설정 실패: exit code=" + exitCode);
-                    }
-                } catch (Exception e) {
-                    System.err.println("스토리지 기본 경로 권한 설정 중 오류: " + e.getMessage());
-                }
+                System.err.println("경고: 스토리지 기본 경로에 쓰기 권한이 없습니다: " + base + " (컨테이너/호스트의 소유자 및 권한 설정 확인 필요)");
             }
             
             // posts 서브디렉토리 확인 및 생성
@@ -101,6 +88,15 @@ public class LocalStorageService implements Storage {
     @Override
     public StoredFile store(MultipartFile file, String directory) throws StorageException {
         try {
+            // 업로드 타입 사전 검증 (선택 적용 지점)
+            try {
+                if (!FileTypeValidator.isAllowed(file, FilePolicy.ALLOWED_IMAGE_TYPES)) {
+                    throw new StorageException("허용되지 않은 파일 유형입니다.");
+                }
+            } catch (Exception e) {
+                throw new StorageException("파일 유형 검사 중 오류: " + e.getMessage(), e);
+            }
+
             String safeName = sanitize(file.getOriginalFilename());
             String ext = getExt(safeName);
             String key = (directory != null && !directory.isBlank() ? directory + "/" : "")
@@ -126,6 +122,15 @@ public class LocalStorageService implements Storage {
     @Override
     public StoredFile store(MultipartFile file, String directory, String key) throws StorageException {
         try {
+            // 업로드 타입 사전 검증 (선택 적용 지점)
+            try {
+                if (!FileTypeValidator.isAllowed(file, FilePolicy.ALLOWED_IMAGE_TYPES)) {
+                    throw new StorageException("허용되지 않은 파일 유형입니다.");
+                }
+            } catch (Exception e) {
+                throw new StorageException("파일 유형 검사 중 오류: " + e.getMessage(), e);
+            }
+
             // 안전성 검증
             assertSafeKey(key);
             
