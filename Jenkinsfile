@@ -125,46 +125,10 @@ pipeline {
           if (shouldSkip) {
             sh './gradlew --no-daemon clean assemble -x test'
           } else {
-            // Gradle에 -D 옵션 전달시 따옴표 및 연속된 & 문제를 해결하기 위해 system.props 파일 생성
-            // 이 방식은 환경변수나 명령줄 인자 처리 문제를 우회함
-            def propFile = "system.props"
-            def propContent = ""
-            
-            // H2 데이터베이스 사용 (CI 환경에서 안정적인 테스트를 위해)
-            propContent += "spring.datasource.url=jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1\n"
-            propContent += "spring.datasource.username=sa\n"
-            propContent += "spring.datasource.password=\n"
-            propContent += "spring.datasource.driver-class-name=org.h2.Driver\n"
-            
-            // H2 설정
-            propContent += "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect\n"
-            propContent += "spring.flyway.enabled=false\n"
-            propContent += "spring.profiles.active=test\n"
-            
-            // jwt/refresh/public-base-url 테스트 값
-            def testJwt = (params.TEST_JWT_SECRET ?: 'local-test-secret-min-32-chars-1234567890').trim()
-            def testAccessExp = (params.TEST_JWT_ACCESS_EXP_MS ?: '3600000').trim()
-            def testRefreshExp = (params.TEST_REFRESH_EXP_MS ?: '1209600000').trim()
-            def pubUrl = params.TEST_PUBLIC_BASE_URL?.trim() ?: 'http://localhost:8080/files'
-            
-            propContent += "jwt.secret=${testJwt}\n"
-            propContent += "jwt.access-exp-ms=${testAccessExp}\n"
-            propContent += "refresh.exp-ms=${testRefreshExp}\n"
-            propContent += "refresh.cookie.name=refreshToken\n"
-            propContent += "refresh.cookie.path=/\n"
-            propContent += "refresh.cookie.secure=false\n"
-            propContent += "refresh.cookie.same-site=Lax\n"
-            
-            // public-base-url 로 통일
-            propContent += "public-base-url=${pubUrl}\n"
-            
-            // 속성 파일 생성
-            writeFile file: propFile, text: propContent
-            echo 'Created system.props file for Gradle properties'
-            sh "cat ${propFile}"
-            
-            // 속성 파일을 통해 시스템 속성 전달
-            sh "./gradlew --no-daemon clean build -Dorg.gradle.jvmargs=-Dfile.encoding=UTF-8 --system-prop ${propFile}"
+            // application.properties와 application-test.yml이 테스트 환경을 설정하므로
+            // 추가 시스템 속성 없이 Gradle 빌드 실행
+            echo 'Running build with tests using H2 in-memory database (configured via application-test.yml)'
+            sh './gradlew --no-daemon clean build'
           }
         }
       }
