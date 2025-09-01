@@ -25,6 +25,10 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    placeholders:
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
   servlet:
     multipart:
       max-file-size: 10MB
