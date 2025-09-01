@@ -8,6 +8,13 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20'))  // 최근 20개만 보관
   }
 
+  // Webhook을 못 쓰는 환경을 위해 주기적 SCM 폴링으로 자동 트리거
+  // 멀티브랜치 파이프라인이라면 잡 설정에서 "Periodic scans"를 켜주세요.
+  triggers {
+    // 평균 분산(H)으로 5분마다 원격 리포지토리 변경 감지
+    pollSCM('H/5 * * * *')
+  }
+
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
   string(name: 'GIT_BRANCH', defaultValue: 'branch(v7)', description: '빌드할 브랜치(멀티브랜치가 아닌 단일 파이프라인일 때 사용). 예: main, develop, branch(v7)')
