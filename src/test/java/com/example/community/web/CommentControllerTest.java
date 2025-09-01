@@ -100,7 +100,7 @@ class CommentControllerTest {
     }
     
     @Test
-        @WithMockUser(username = "test@example.com", roles = {"USER"})
+    @WithMockUser(username = "test@example.com", roles = {"USER"})
     @DisplayName("인증된 사용자는 댓글을 작성할 수 있음")
     void createCommentAuthenticated() throws Exception {
         // given
@@ -110,11 +110,11 @@ class CommentControllerTest {
         
         Member author = createTestMember();
         
-    var post = com.example.community.domain.Post.builder().id(1L).title("t").content("c").author(author).build();
-    Comment savedComment = Comment.builder()
+        var post = com.example.community.domain.Post.builder().id(1L).title("t").content("c").author(author).build();
+        Comment savedComment = Comment.builder()
                 .id(1L)
                 .content(content)
-        .post(post)
+                .post(post)
                 .author(author)
                 .build();
         
@@ -123,16 +123,16 @@ class CommentControllerTest {
                 .thenReturn(savedComment);
         
         // when & then
-    mockMvc.perform(post("/api/posts/{postId}/comments", postId)
-        .with(csrf())
-        .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
-        .header("Origin", "http://localhost:3000")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(createReq)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.content").value(content))
-                .andExpect(jsonPath("$.author.username").value(author.getUsername()));
+        mockMvc.perform(post("/api/posts/{postId}/comments", postId)
+            .with(csrf())
+            .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(createReq)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.content").value(content))
+            .andExpect(jsonPath("$.author.username").value(author.getUsername()));
         
         // 서비스 메서드 호출 확인
         verify(commentService).add(eq(postId), eq(1L), eq(content));
@@ -175,11 +175,11 @@ class CommentControllerTest {
         doNothing().when(commentService).delete(commentId);
         
         // when & then
-    mockMvc.perform(delete("/api/comments/{id}", commentId)
-        .with(csrf())
-        .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
-        .header("Origin", "http://localhost:3000"))
-                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/comments/{id}", commentId)
+            .with(csrf())
+            .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000"))
+            .andExpect(status().isNoContent());
         
         // 서비스 메서드 호출 확인
         verify(commentService).delete(commentId);
@@ -196,11 +196,11 @@ class CommentControllerTest {
         when(commentSecurity.isAuthor(eq(commentId), any())).thenReturn(false);
         
         // when & then
-    mockMvc.perform(delete("/api/comments/{id}", commentId)
-        .with(csrf())
-        .with(user(new MemberDetails(2L, "other@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
-        .header("Origin", "http://localhost:3000"))
-                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/comments/{id}", commentId)
+            .with(csrf())
+            .with(user(new MemberDetails(2L, "other@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000"))
+            .andExpect(status().isForbidden());
         
         // 서비스 메서드 호출되지 않음 확인
         verify(commentService, never()).delete(anyLong());
@@ -218,11 +218,11 @@ class CommentControllerTest {
         doNothing().when(commentService).delete(commentId);
         
         // when & then
-    mockMvc.perform(delete("/api/comments/{id}", commentId)
-        .with(csrf())
-        .with(user(new MemberDetails(99L, "admin@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"), new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
-        .header("Origin", "http://localhost:3000"))
-                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/comments/{id}", commentId)
+            .with(csrf())
+            .with(user(new MemberDetails(99L, "admin@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"), new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000"))
+            .andExpect(status().isNoContent());
         
         // 서비스 메서드 호출 확인 
         verify(commentService).delete(commentId);

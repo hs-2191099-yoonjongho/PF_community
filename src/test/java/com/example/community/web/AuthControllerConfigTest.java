@@ -2,17 +2,14 @@ package com.example.community.web;
 
 import com.example.community.config.JwtUtil;
 import com.example.community.repository.MemberRepository;
-import com.example.community.service.MemberService;
 import com.example.community.service.RefreshTokenService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -36,9 +33,6 @@ import static org.junit.jupiter.api.Assertions.*;
 })
 public class AuthControllerConfigTest {
 
-    @Autowired
-    private AuthController authController;
-
     @MockitoBean
     private RefreshTokenService refreshTokenService;
     
@@ -47,9 +41,6 @@ public class AuthControllerConfigTest {
     
     @MockitoBean
     private MemberRepository memberRepository;
-    
-    @MockitoBean
-    private MemberService memberService;
     
     @MockitoBean
     private AuthenticationManager authenticationManager;

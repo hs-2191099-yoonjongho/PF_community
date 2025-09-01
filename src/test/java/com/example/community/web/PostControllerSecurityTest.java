@@ -2,13 +2,10 @@ package com.example.community.web;
 
 import com.example.community.domain.BoardType;
 import com.example.community.domain.Post;
-import com.example.community.repository.PostRepository;
 import com.example.community.security.PostSecurity;
 import com.example.community.service.PostService;
-import com.example.community.service.PostLikeService;
 import com.example.community.service.dto.PostDtos;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.example.community.config.SecurityConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,21 +53,8 @@ class PostControllerSecurityTest {
     @MockitoBean
     private PostService postService;
 
-        @MockitoBean(name = "postSecurity")
-        private PostSecurity postSecurity;
-    
-    // 추가 필요한 모의 빈들 (컨트롤러 의존성에 따라 추가)
-    @MockitoBean
-    private PostRepository postRepository;
-
-        @MockitoBean
-        private PostLikeService postLikeService;
-
-                // SecurityConfig dependencies
-                @org.springframework.test.context.bean.override.mockito.MockitoBean
-                private com.example.community.config.JwtUtil jwtUtil;
-                @org.springframework.test.context.bean.override.mockito.MockitoBean
-                private com.example.community.service.CustomUserDetailsService customUserDetailsService;
+    @MockitoBean(name = "postSecurity")
+    private PostSecurity postSecurity;
 
     @Test
     @DisplayName("익명 사용자는 게시글 목록을 조회할 수 있음")
@@ -221,7 +205,6 @@ class PostControllerSecurityTest {
         when(postSecurity.isOwner(eq(postId), any())).thenReturn(false);
 
         // when & then
-        when(postSecurity.isOwner(eq(postId), any())).thenReturn(false);
         mockMvc.perform(delete("/api/posts/{id}", postId)
                 .with(csrf())
                 .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(new com.example.community.security.MemberDetails(1L, "testuser", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
