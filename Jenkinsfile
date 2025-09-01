@@ -357,8 +357,8 @@ if [ -n "$ADMIN_EMAIL" ] || [ -n "$ADMIN_USERNAME" ] || [ -n "$ADMIN_PASSWORD_HA
   fi
 fi
 
-# .env 생성
-cat > .env <<ENV
+# .env 생성 - 환경 변수 직접 지정
+cat > .env <<EOF
 SPRING_PROFILES_ACTIVE=prod
 DB_URL=$DB_URL
 DB_USERNAME=$DB_USER
@@ -381,7 +381,11 @@ SERVER_PORT=8080
 ADMIN_EMAIL=$ADMIN_EMAIL
 ADMIN_USERNAME=$ADMIN_USERNAME
 ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH
-ENV
+EOF
+
+# .env 파일 내용 확인 (디버깅용)
+echo "Created .env file with the following contents:"
+cat .env
 
 # compose 생성 및 기동
 cat > docker-compose.yml <<YML
@@ -394,44 +398,57 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: "\${SPRING_PROFILES_ACTIVE}"
-      DB_URL: "\${DB_URL}"
-      DB_USERNAME: "\${DB_USERNAME}"
-      DB_PASSWORD: "\${DB_PASSWORD}"
-      JWT_SECRET: "\${JWT_SECRET}"
-      JWT_ACCESS_EXP_MS: "\${JWT_ACCESS_EXP_MS}"
-      JWT_ISSUER: "\${JWT_ISSUER}"
-      REFRESH_EXP_MS: "\${REFRESH_EXP_MS}"
-      REFRESH_COOKIE_NAME: "\${REFRESH_COOKIE_NAME}"
-      REFRESH_COOKIE_PATH: "\${REFRESH_COOKIE_PATH}"
-      REFRESH_COOKIE_SECURE: "\${REFRESH_COOKIE_SECURE}"
-      REFRESH_COOKIE_SAME_SITE: "\${REFRESH_COOKIE_SAME_SITE}"
-      REFRESH_COOKIE_DOMAIN: "\${REFRESH_COOKIE_DOMAIN}"
-      ALLOWED_ORIGINS: "\${ALLOWED_ORIGINS}"
-      PUBLIC_BASE_URL: "\${PUBLIC_BASE_URL}"
-      S3_BUCKET: "\${S3_BUCKET}"
+      SPRING_PROFILES_ACTIVE: "prod"
+      DB_URL: "${DB_URL}"
+      DB_USERNAME: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASS}"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ACCESS_EXP_MS: "${JWT_ACCESS_EXP_MS}"
+      JWT_ISSUER: "${JWT_ISSUER}"
+      REFRESH_EXP_MS: "${REFRESH_EXP_MS}"
+      REFRESH_COOKIE_NAME: "${REFRESH_COOKIE_NAME}"
+      REFRESH_COOKIE_PATH: "${REFRESH_COOKIE_PATH}"
+      REFRESH_COOKIE_SECURE: "${REFRESH_COOKIE_SECURE}"
+      REFRESH_COOKIE_SAME_SITE: "${REFRESH_COOKIE_SAME_SITE}"
+      REFRESH_COOKIE_DOMAIN: "${REFRESH_COOKIE_DOMAIN}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL}"
+      S3_BUCKET: "${S3_BUCKET}"
       SERVER_PORT: "8080"
-      ADMIN_EMAIL: "\${ADMIN_EMAIL}"
-      ADMIN_USERNAME: "\${ADMIN_USERNAME}"
-      ADMIN_PASSWORD_HASH: "\${ADMIN_PASSWORD_HASH}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
     volumes:
       - ./uploads:/app/uploads
 YML
 
 docker compose pull || true
-docker compose up -d
+echo "Starting the application container with docker-compose..."
+# .env 파일을 명시적으로 지정하여 실행
+docker compose --env-file .env up -d
 
-echo "Waiting for health (up to ~90s)..."
+# 헬스 체크 로직 개선
+echo "Waiting for health check (up to ~90s)..."
+HEALTH_CHECK_PASSED=false
 for i in $(seq 1 30); do
+  echo "Health check attempt $i/30..."
   if curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
-    echo "Health check passed."
-    exit 0
+    echo "Health check passed successfully!"
+    HEALTH_CHECK_PASSED=true
+    break
   fi
   sleep 3
 done
-echo "Health check timed out. Showing logs..."
-docker compose logs --no-color | tail -n 200 || true
-exit 1
+
+if [ "$HEALTH_CHECK_PASSED" != "true" ]; then
+  echo "Health check timed out. Showing container logs..."
+  docker compose logs --no-color app | tail -n 200 || true
+  echo "Container status:"
+  docker ps -a | grep community-app || true
+  exit 1
+fi
+
+echo "Application successfully deployed and running!"
 EOS
 
           # 자리표시자 치환
