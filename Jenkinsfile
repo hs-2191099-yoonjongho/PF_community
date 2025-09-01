@@ -8,13 +8,6 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20'))  // 최근 20개만 보관
   }
 
-  // Webhook을 못 쓰는 환경을 위해 주기적 SCM 폴링으로 자동 트리거
-  // 멀티브랜치 파이프라인이라면 잡 설정에서 "Periodic scans"를 켜주세요.
-  triggers {
-    // 평균 분산(H)으로 5분마다 원격 리포지토리 변경 감지
-    pollSCM('H/5 * * * *')
-  }
-
   parameters {
     string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Optional: private repo credentials ID (leave empty for public repos)')
   string(name: 'GIT_BRANCH', defaultValue: 'branch(v7)', description: '빌드할 브랜치(멀티브랜치가 아닌 단일 파이프라인일 때 사용). 예: main, develop, branch(v7)')
@@ -22,13 +15,11 @@ pipeline {
     string(name: 'AWS_ACCOUNT_ID', defaultValue: '', description: 'AWS 계정 ID')
     string(name: 'AWS_REGION', defaultValue: 'ap-northeast-2', description: 'AWS 리전')
   // 배포 타겟별 자원
-  string(name: 'STAGING_EC2_INSTANCE_ID', defaultValue: '', description: 'Staging EC2 인스턴스 ID (develop 배포 대상)')
   string(name: 'PROD_EC2_INSTANCE_ID', defaultValue: '', description: 'Production EC2 인스턴스 ID (main 배포 대상)')
     string(name: 'AWS_CREDENTIALS_ID', defaultValue: 'aws-jenkins-accesskey', description: 'Jenkins에 설정된 AWS 자격증명 ID')
     string(name: 'DEPLOY_ROLE_ARN', defaultValue: '', description: 'AWS IAM 배포 역할 ARN')
-  // 브랜치별 SSM 프리픽스(스테이징/운영). feature 브랜치는 배포 없음
-  string(name: 'STAGING_SSM_PREFIX', defaultValue: '/community-portfolio/stage', description: 'SSM 파라미터 프리픽스 (develop → staging)')
-  string(name: 'PROD_SSM_PREFIX', defaultValue: '/community-portfolio/prod', description: 'SSM 파라미터 프리픽스 (main → prod)')
+  // 운영 환경 SSM 프리픽스만 사용 (develop는 CI만)
+  string(name: 'PROD_SSM_PREFIX', defaultValue: '/community-portfolio/prod', description: 'SSM 파라미터 프리픽스 (main/master → prod)')
   booleanParam(name: 'REQUIRE_PROD_APPROVAL', defaultValue: true, description: '운영 배포 전 수동 승인 필요 여부')
   }
 
@@ -87,13 +78,7 @@ pipeline {
           env.DEPLOY_EC2_INSTANCE_ID = ''
           env.IMAGE_CHANNEL_TAG = ''
 
-          if (detected == 'develop') {
-            env.DEPLOY_TARGET = 'staging'
-            env.DEPLOY_ENABLED = 'true'
-            env.DEPLOY_EC2_INSTANCE_ID = params.STAGING_EC2_INSTANCE_ID?.trim()
-            env.SSM_PREFIX = params.STAGING_SSM_PREFIX?.trim()
-            env.IMAGE_CHANNEL_TAG = 'staging'
-          } else if (detected == 'main' || detected == 'master') {
+          if (detected == 'main' || detected == 'master') {
             env.DEPLOY_TARGET = 'prod'
             env.DEPLOY_ENABLED = 'true'
             env.DEPLOY_EC2_INSTANCE_ID = params.PROD_EC2_INSTANCE_ID?.trim()
