@@ -122,45 +122,53 @@ pipeline {
           def shouldSkip = params.SKIP_TESTS || (env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY)
           echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, SKIP_TESTS=${params.SKIP_TESTS}, RUN_TESTS_ON_DEPLOY=${params.RUN_TESTS_ON_DEPLOY})"
 
-          String cmd
           if (shouldSkip) {
-            cmd = './gradlew --no-daemon clean assemble -x test'
+            sh './gradlew --no-daemon clean assemble -x test'
           } else {
-            cmd = './gradlew --no-daemon clean build'
-            def props = []
+            // Gradle에 -D 옵션 전달시 따옴표 및 연속된 & 문제를 해결하기 위해 system.props 파일 생성
+            // 이 방식은 환경변수나 명령줄 인자 처리 문제를 우회함
+            def propFile = "system.props"
+            def propContent = ""
+            
             // 표준 spring.datasource.* 우선, 없으면 구(Deprecated) 키를 spring.*로 매핑
             def dsUrl = params.TEST_SPRING_DATASOURCE_URL?.trim() ?: params.TEST_DB_URL?.trim()
             def dsUser = params.TEST_SPRING_DATASOURCE_USERNAME?.trim() ?: params.TEST_DB_USERNAME?.trim()
             def dsPass = params.TEST_SPRING_DATASOURCE_PASSWORD?.trim() ?: params.TEST_DB_PASSWORD?.trim()
-            if (dsUrl)  { props << "-Dspring.datasource.url='${dsUrl}'" }
-            if (dsUser) { props << "-Dspring.datasource.username='${dsUser}'" }
-            if (dsPass) { props << "-Dspring.datasource.password='${dsPass}'" }
-
+            
+            if (dsUrl)  { propContent += "spring.datasource.url=${dsUrl}\n" }
+            if (dsUser) { propContent += "spring.datasource.username=${dsUser}\n" }
+            if (dsPass) { propContent += "spring.datasource.password=${dsPass}\n" }
+            
             // Hibernate Dialect/Flyway for MySQL tests
-            props << "-Dspring.jpa.properties.hibernate.dialect='org.hibernate.dialect.MySQLDialect'"
-            props << "-Dspring.flyway.enabled=true"
-
+            propContent += "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect\n"
+            propContent += "spring.flyway.enabled=true\n"
+            propContent += "spring.profiles.active=test\n"
+            
             // jwt/refresh/public-base-url 테스트 값
             def testJwt = (params.TEST_JWT_SECRET ?: 'local-test-secret-min-32-chars-1234567890').trim()
             def testAccessExp = (params.TEST_JWT_ACCESS_EXP_MS ?: '3600000').trim()
             def testRefreshExp = (params.TEST_REFRESH_EXP_MS ?: '1209600000').trim()
             def pubUrl = params.TEST_PUBLIC_BASE_URL?.trim() ?: 'http://localhost:8080/files'
-            props << "-Djwt.secret='${testJwt}'"
-            props << "-Djwt.access-exp-ms='${testAccessExp}'"
-            props << "-Drefresh.exp-ms='${testRefreshExp}'"
-            props << "-Drefresh.cookie.name='refreshToken'"
-            props << "-Drefresh.cookie.path='/'"
-            props << "-Drefresh.cookie.secure=false"
-            props << "-Drefresh.cookie.same-site='Lax'"
+            
+            propContent += "jwt.secret=${testJwt}\n"
+            propContent += "jwt.access-exp-ms=${testAccessExp}\n"
+            propContent += "refresh.exp-ms=${testRefreshExp}\n"
+            propContent += "refresh.cookie.name=refreshToken\n"
+            propContent += "refresh.cookie.path=/\n"
+            propContent += "refresh.cookie.secure=false\n"
+            propContent += "refresh.cookie.same-site=Lax\n"
+            
             // public-base-url 로 통일
-            props << "-Dpublic-base-url='${pubUrl}'"
-
-            if (props) {
-              echo 'Tests will use -D overrides (datasource, dialect/flyway, jwt/refresh, public-base-url).'
-              cmd = cmd + ' ' + props.join(' ')
-            }
+            propContent += "public-base-url=${pubUrl}\n"
+            
+            // 속성 파일 생성
+            writeFile file: propFile, text: propContent
+            echo 'Created system.props file for Gradle properties'
+            sh "cat ${propFile}"
+            
+            // 속성 파일을 통해 시스템 속성 전달
+            sh "./gradlew --no-daemon clean build -Dorg.gradle.jvmargs=-Dfile.encoding=UTF-8 --system-prop ${propFile}"
           }
-          sh cmd
         }
       }
     }
