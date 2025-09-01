@@ -23,10 +23,19 @@ pipeline {
   booleanParam(name: 'RUN_TESTS_ON_DEPLOY', defaultValue: false, description: '배포 브랜치(main/master)에서도 테스트를 실행할지 여부(기본: 실행 안 함)')
   booleanParam(name: 'REQUIRE_PROD_APPROVAL', defaultValue: true, description: '운영 배포 전 수동 승인 필요 여부')
 
-  // Jenkins in Docker 환경에서 테스트 DB를 오버라이드할 때 사용 (예: host.docker.internal)
-  string(name: 'TEST_DB_URL', defaultValue: '', description: 'Optional: 테스트용 DB URL 오버라이드 (예: jdbc:mysql://host.docker.internal:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci)')
-  string(name: 'TEST_DB_USERNAME', defaultValue: '', description: 'Optional: 테스트용 DB 사용자명 오버라이드')
-  string(name: 'TEST_DB_PASSWORD', defaultValue: '', description: 'Optional: 테스트용 DB 비밀번호 오버라이드 (로그에 노출될 수 있으므로 로컬 개발 DB에만 사용 권장)')
+  // Jenkins in Docker: 테스트용 표준 Spring 키로 -D 주입(권장)
+  string(name: 'TEST_SPRING_DATASOURCE_URL', defaultValue: '', description: 'Optional: -Dspring.datasource.url (예: jdbc:mysql://host.docker.internal:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci)')
+  string(name: 'TEST_SPRING_DATASOURCE_USERNAME', defaultValue: '', description: 'Optional: -Dspring.datasource.username')
+  string(name: 'TEST_SPRING_DATASOURCE_PASSWORD', defaultValue: '', description: 'Optional: -Dspring.datasource.password (민감정보 주의)')
+  // 하위호환: 기존 사용자 정의 키 지원(제공 시 spring.datasource.*로 매핑)
+  string(name: 'TEST_DB_URL', defaultValue: '', description: 'Deprecated(대체: TEST_SPRING_DATASOURCE_URL)')
+  string(name: 'TEST_DB_USERNAME', defaultValue: '', description: 'Deprecated(대체: TEST_SPRING_DATASOURCE_USERNAME)')
+  string(name: 'TEST_DB_PASSWORD', defaultValue: '', description: 'Deprecated(대체: TEST_SPRING_DATASOURCE_PASSWORD)')
+  // 테스트 시 필요한 토큰/공개 URL 값도 표준 키로 주입
+  string(name: 'TEST_JWT_SECRET', defaultValue: 'local-test-secret-min-32-chars-1234567890', description: 'Optional: -Djwt.secret')
+  string(name: 'TEST_JWT_ACCESS_EXP_MS', defaultValue: '3600000', description: 'Optional: -Djwt.access-exp-ms')
+  string(name: 'TEST_REFRESH_EXP_MS', defaultValue: '1209600000', description: 'Optional: -Drefresh.exp-ms')
+  string(name: 'TEST_PUBLIC_BASE_URL', defaultValue: 'http://localhost:8080/files', description: 'Optional: -Dpublic-base-url (/files로 끝나야 함)')
   }
 
   environment {
@@ -119,11 +128,35 @@ pipeline {
           } else {
             cmd = './gradlew --no-daemon clean build'
             def props = []
-            if (params.TEST_DB_URL?.trim())      { props << "-DDB_URL='${params.TEST_DB_URL.trim()}'" }
-            if (params.TEST_DB_USERNAME?.trim()) { props << "-DDB_USERNAME='${params.TEST_DB_USERNAME.trim()}'" }
-            if (params.TEST_DB_PASSWORD?.trim()) { props << "-DDB_PASSWORD='${params.TEST_DB_PASSWORD.trim()}'" }
+            // 표준 spring.datasource.* 우선, 없으면 구(Deprecated) 키를 spring.*로 매핑
+            def dsUrl = params.TEST_SPRING_DATASOURCE_URL?.trim() ?: params.TEST_DB_URL?.trim()
+            def dsUser = params.TEST_SPRING_DATASOURCE_USERNAME?.trim() ?: params.TEST_DB_USERNAME?.trim()
+            def dsPass = params.TEST_SPRING_DATASOURCE_PASSWORD?.trim() ?: params.TEST_DB_PASSWORD?.trim()
+            if (dsUrl)  { props << "-Dspring.datasource.url='${dsUrl}'" }
+            if (dsUser) { props << "-Dspring.datasource.username='${dsUser}'" }
+            if (dsPass) { props << "-Dspring.datasource.password='${dsPass}'" }
+
+            // Hibernate Dialect/Flyway for MySQL tests
+            props << "-Dspring.jpa.properties.hibernate.dialect='org.hibernate.dialect.MySQLDialect'"
+            props << "-Dspring.flyway.enabled=true"
+
+            // jwt/refresh/public-base-url 테스트 값
+            def testJwt = (params.TEST_JWT_SECRET ?: 'local-test-secret-min-32-chars-1234567890').trim()
+            def testAccessExp = (params.TEST_JWT_ACCESS_EXP_MS ?: '3600000').trim()
+            def testRefreshExp = (params.TEST_REFRESH_EXP_MS ?: '1209600000').trim()
+            def pubUrl = params.TEST_PUBLIC_BASE_URL?.trim() ?: 'http://localhost:8080/files'
+            props << "-Djwt.secret='${testJwt}'"
+            props << "-Djwt.access-exp-ms='${testAccessExp}'"
+            props << "-Drefresh.exp-ms='${testRefreshExp}'"
+            props << "-Drefresh.cookie.name='refreshToken'"
+            props << "-Drefresh.cookie.path='/'"
+            props << "-Drefresh.cookie.secure=false"
+            props << "-Drefresh.cookie.same-site='Lax'"
+            // public-base-url 로 통일
+            props << "-Dpublic-base-url='${pubUrl}'"
+
             if (props) {
-              echo 'Tests will use custom DB_URL override.'
+              echo 'Tests will use -D overrides (datasource, dialect/flyway, jwt/refresh, public-base-url).'
               cmd = cmd + ' ' + props.join(' ')
             }
           }
@@ -469,16 +502,12 @@ services:
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL}"
       S3_BUCKET: "${S3_BUCKET}"
       SERVER_PORT: "${SERVER_PORT}"
-  ADMIN_EMAIL: "${ADMIN_EMAIL}"
-  ADMIN_USERNAME: "${ADMIN_USERNAME}"
-  ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH}"
     volumes:
       - ./uploads:/app/uploads
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:${SERVER_PORT}/actuator/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
+    # 컨테이너 내 curl 비존재 가능성 때문에 healthcheck 제거 (외부에서 SSM로 헬스 확인)
 YML
 
 docker compose pull || true

@@ -42,6 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Spring Security를 통합하여 인증/인가 기능 테스트
  */
 @SpringBootTest
+@org.springframework.test.context.ActiveProfiles("test")
 @AutoConfigureMockMvc(addFilters = true)
 @org.springframework.test.context.TestPropertySource(properties = {"ALLOWED_ORIGINS=http://localhost:3000"})
 class PostControllerSecurityTest {
