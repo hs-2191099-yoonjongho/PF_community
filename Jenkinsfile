@@ -72,6 +72,22 @@ pipeline {
           def detected = env.BRANCH_NAME?.trim()
           if (!detected) {
             detected = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+            // 클론한 커밋이 속한 브랜치 찾기 (HEAD 상태에서도 작동)
+            if (detected == 'HEAD') {
+              // 현재 커밋 해시 가져오기
+              def commitHash = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+              // 이 커밋을 포함하는 원격 브랜치 확인
+              def remoteBranches = sh(script: "git branch -r --contains ${commitHash}", returnStdout: true).trim()
+              // origin/main 또는 origin/master가 있는지 확인
+              if (remoteBranches.contains('origin/main')) {
+                detected = 'main'
+              } else if (remoteBranches.contains('origin/master')) {
+                detected = 'master'
+              } else if (params.GIT_BRANCH?.trim()) {
+                // 원격 브랜치 감지 실패 시 파라미터 사용
+                detected = params.GIT_BRANCH.trim()
+              }
+            }
           }
           env.GIT_BRANCH_NAME = detected
 
@@ -81,7 +97,9 @@ pipeline {
           env.DEPLOY_EC2_INSTANCE_ID = ''
           env.IMAGE_CHANNEL_TAG = ''
 
-          if (detected == 'main' || detected == 'master') {
+          // 브랜치가 main/master거나, GIT_BRANCH 파라미터가 main/master인 경우에도 배포 활성화
+          if (detected == 'main' || detected == 'master' || 
+              params.GIT_BRANCH?.trim() == 'main' || params.GIT_BRANCH?.trim() == 'master') {
             env.DEPLOY_TARGET = 'prod'
             env.DEPLOY_ENABLED = 'true'
             env.DEPLOY_EC2_INSTANCE_ID = params.PROD_EC2_INSTANCE_ID?.trim()
