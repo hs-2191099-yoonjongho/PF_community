@@ -2,43 +2,70 @@ package com.example.community.web;
 
 import com.example.community.domain.Comment;
 import com.example.community.domain.Member;
-import com.example.community.domain.Post;
+import com.example.community.repository.dto.CommentProjection;
+import com.example.community.security.MemberDetails;
 import com.example.community.service.CommentService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(CommentController.class)
+@AutoConfigureMockMvc(addFilters = true)
+@TestPropertySource(properties = {"ALLOWED_ORIGINS=http://localhost:3000"})
+@Import(CommentControllerTest.MethodSec.class)
 class CommentControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private CommentService commentService;
     
     // 보안 설정을 위한 추가 Mock 빈들
-    @MockBean
+    @MockitoBean(name = "commentSecurity")
     private com.example.community.security.CommentSecurity commentSecurity;
+    
+    // 테스트 데이터 설정을 위한 헬퍼 메서드
+    private Member createTestMember() {
+        return Member.builder()
+                .id(1L)
+                .username("테스터")
+                .email("test@example.com")
+                .roles(Set.of("ROLE_USER"))
+                .build();
+    }
+    
+    // helper removed: createTestPost was unused
 
     @Test
     @WithMockUser
@@ -46,54 +73,21 @@ class CommentControllerTest {
     void getByPostPaged() throws Exception {
         // given
         Long postId = 1L;
-        Member author = Member.builder()
-                .id(1L)
-                .username("테스터")
-                .email("test@example.com")
-                .roles(Set.of("ROLE_USER"))
-                .build();
-
-        Post post = Post.builder()
-                .id(postId)
-                .title("테스트 게시글")
-                .content("테스트 내용입니다.")
-                .author(author)
-                .build();
-
-        LocalDateTime now = LocalDateTime.now();
-        Comment comment1 = Comment.builder()
-                .id(1L)
-                .post(post)
-                .author(author)
-                .content("첫 번째 댓글")
-                .build();
+        var member1 = new CommentProjection.MemberDto(1L, "테스터");
         
-        // Comment 엔티티에 createdAt 필드 설정 방법이 없다면 리플렉션 사용 (테스트 코드만을 위한 방법)
-        try {
-            java.lang.reflect.Field createdAtField = comment1.getClass().getSuperclass().getDeclaredField("createdAt");
-            createdAtField.setAccessible(true);
-            createdAtField.set(comment1, now);
-        } catch (Exception e) {
-            // 리플렉션 실패 시 무시 (테스트에 중요하지 않음)
-        }
-
-        Comment comment2 = Comment.builder()
-                .id(2L)
-                .post(post)
-                .author(author)
-                .content("두 번째 댓글")
-                .build();
+        List<CommentProjection> commentProjections = List.of(
+            new CommentProjection(1L, "첫 번째 댓글", LocalDateTime.now(), member1, postId),
+            new CommentProjection(2L, "두 번째 댓글", LocalDateTime.now(), member1, postId)
+        );
 
         Pageable pageable = PageRequest.of(0, 20);
-        List<Comment> comments = List.of(comment1, comment2);
-        Page<Comment> commentPage = new PageImpl<>(comments, pageable, comments.size());
+        Page<CommentProjection> projectionPage = new PageImpl<>(commentProjections, pageable, commentProjections.size());
 
-        when(commentService.getByPostWithPaging(eq(postId), any(Pageable.class)))
-                .thenReturn(commentPage);
+        when(commentService.getProjectionsByPostWithPaging(eq(postId), any(Pageable.class)))
+                .thenReturn(projectionPage);
 
         // when & then
-        mockMvc.perform(get("/api/comments/paged")
-                .param("postId", postId.toString()))
+        mockMvc.perform(get("/api/posts/{postId}/comments", postId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content.length()").value(2))
@@ -103,5 +97,134 @@ class CommentControllerTest {
                 .andExpect(jsonPath("$.pageInfo.totalPages").value(1))
                 .andExpect(jsonPath("$.pageInfo.first").value(true))
                 .andExpect(jsonPath("$.pageInfo.last").value(true));
+    }
+    
+    @Test
+    @WithMockUser(username = "test@example.com", roles = {"USER"})
+    @DisplayName("인증된 사용자는 댓글을 작성할 수 있음")
+    void createCommentAuthenticated() throws Exception {
+        // given
+        Long postId = 1L;
+        String content = "테스트 댓글입니다";
+        CommentController.CreateReq createReq = new CommentController.CreateReq(content);
+        
+        Member author = createTestMember();
+        
+        var post = com.example.community.domain.Post.builder().id(1L).title("t").content("c").author(author).build();
+        Comment savedComment = Comment.builder()
+                .id(1L)
+                .content(content)
+                .post(post)
+                .author(author)
+                .build();
+        
+        // 현재 인증 주체(MemberDetails)의 id=1L 가정
+        when(commentService.add(eq(postId), eq(1L), eq(content)))
+                .thenReturn(savedComment);
+        
+        // when & then
+        mockMvc.perform(post("/api/posts/{postId}/comments", postId)
+            .with(csrf())
+            .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(createReq)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(1))
+            .andExpect(jsonPath("$.content").value(content))
+            .andExpect(jsonPath("$.author.username").value(author.getUsername()));
+        
+        // 서비스 메서드 호출 확인
+        verify(commentService).add(eq(postId), eq(1L), eq(content));
+    }
+
+    @TestConfiguration
+    @EnableMethodSecurity
+    static class MethodSec {}
+    
+    @Test
+    @WithAnonymousUser
+    @DisplayName("인증되지 않은 사용자는 댓글을 작성할 수 없음")
+    void createCommentUnauthenticated() throws Exception {
+        // given
+        Long postId = 1L;
+        String content = "테스트 댓글입니다";
+        CommentController.CreateReq createReq = new CommentController.CreateReq(content);
+        
+        // when & then
+        mockMvc.perform(post("/api/posts/{postId}/comments", postId)
+                .with(csrf())
+                .header("Origin", "http://localhost:3000")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isUnauthorized());
+        
+        // 서비스 메서드 호출되지 않음 확인
+        verify(commentService, never()).add(anyLong(), anyLong(), anyString());
+    }
+    
+    @Test
+    @WithMockUser(username = "test@example.com", roles = {"USER"})
+    @DisplayName("댓글 작성자는 자신의 댓글을 삭제할 수 있음")
+    void deleteCommentByAuthor() throws Exception {
+        // given
+        Long commentId = 1L;
+        
+        // 댓글 작성자 권한 확인
+        when(commentSecurity.isAuthor(eq(commentId), any())).thenReturn(true);
+        doNothing().when(commentService).delete(commentId);
+        
+        // when & then
+        mockMvc.perform(delete("/api/comments/{id}", commentId)
+            .with(csrf())
+            .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000"))
+            .andExpect(status().isNoContent());
+        
+        // 서비스 메서드 호출 확인
+        verify(commentService).delete(commentId);
+    }
+    
+    @Test
+    @WithMockUser(username = "other@example.com", roles = {"USER"})
+    @DisplayName("다른 사용자는 작성자의 댓글을 삭제할 수 없음")
+    void deleteCommentByNonAuthor() throws Exception {
+        // given
+        Long commentId = 1L;
+        
+        // 다른 사용자는 댓글 삭제 권한 없음
+        when(commentSecurity.isAuthor(eq(commentId), any())).thenReturn(false);
+        
+        // when & then
+        mockMvc.perform(delete("/api/comments/{id}", commentId)
+            .with(csrf())
+            .with(user(new MemberDetails(2L, "other@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000"))
+            .andExpect(status().isForbidden());
+        
+        // 서비스 메서드 호출되지 않음 확인
+        verify(commentService, never()).delete(anyLong());
+    }
+    
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"USER", "ADMIN"})
+    @DisplayName("관리자는 모든 댓글을 삭제할 수 있음")
+    void deleteCommentByAdmin() throws Exception {
+        // given
+        Long commentId = 1L;
+        
+        // 관리자는 모든 댓글 삭제 가능 (CommentSecurity.isAuthor는 false여도 됨)
+        when(commentSecurity.isAuthor(eq(commentId), any())).thenReturn(false);
+        doNothing().when(commentService).delete(commentId);
+        
+        // when & then
+        mockMvc.perform(delete("/api/comments/{id}", commentId)
+            .with(csrf())
+            .with(user(new MemberDetails(99L, "admin@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"), new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
+            .header("Origin", "http://localhost:3000"))
+            .andExpect(status().isNoContent());
+        
+        // 서비스 메서드 호출 확인 
+        verify(commentService).delete(commentId);
     }
 }

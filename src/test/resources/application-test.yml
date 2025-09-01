@@ -1,54 +1,55 @@
 spring:
   datasource:
-    # localhost 사용으로 변경 (Docker 환경이 아닌 경우에도 일관된 실행 가능)
-    url: ${DB_URL:jdbc:mysql://localhost:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:1234}
-    hikari:
-      connection-init-sql: "SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+    # H2 인메모리 데이터베이스 사용 (CI 환경에서 안정적인 테스트용)
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      # 로컬 개발환경: Flyway 대신 JPA DDL 자동 생성 사용
       ddl-auto: create-drop
     properties:
       hibernate:
         format_sql: true
         default_batch_fetch_size: 100
+        dialect: org.hibernate.dialect.H2Dialect
   flyway:
-    # 로컬 개발환경에서는 Flyway 비활성화
+    # 테스트 환경에서는 Flyway 비활성화
     enabled: false
+  h2:
+    console:
+      enabled: true
 
 logging:
   level:
     org.hibernate.SQL: info
     org.hibernate.orm.jdbc.bind: warn
 
-# 테스트에서 필요한 보안/스토리지 등 플레이스홀더 채움
+# 테스트에서 필요한 보안/스토리지 등 고정 값 설정
 jwt:
-  secret: ${JWT_SECRET:local-test-secret-min-32-chars-1234567890}
-  access-exp-ms: ${JWT_ACCESS_EXP_MS:3600000}
-  issuer: ${JWT_ISSUER:community-app}
+  secret: local-test-secret-min-32-chars-1234567890
+  access-exp-ms: 3600000
+  issuer: community-app
 
 refresh:
-  exp-ms: ${REFRESH_EXP_MS:1209600000}
+  exp-ms: 1209600000
   cookie:
-    name: ${REFRESH_COOKIE_NAME:refresh_token}
-    path: ${REFRESH_COOKIE_PATH:/api/auth}
-    secure: ${REFRESH_COOKIE_SECURE:false}
-    same-site: ${REFRESH_COOKIE_SAME_SITE:Lax}
-    domain: ${REFRESH_COOKIE_DOMAIN:}
+    name: refreshToken
+    path: /
+    secure: false
+    same-site: Lax
+    domain: 
 
 app:
   cors:
-    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origins: http://localhost:3000,http://127.0.0.1:3000
   security:
-    token-hash-algorithm: ${SECURITY_HASH_ALGORITHM:SHA-256}
-    max-refresh-tokens-per-user: ${MAX_REFRESH_TOKENS:5}
-    enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:false}
+    token-hash-algorithm: SHA-256
+    max-refresh-tokens-per-user: 5
+  enable-origin-validation: false
+  public-base-url: http://localhost:8080/files
   storage:
     provider: local
-    # 8080 포트로 통일 (docker-compose.yml과 일치)
-    public-base-url: http://localhost:8080/files
     local:
       # 테스트용 임시 디렉토리 사용 (시스템 임시 디렉토리 내 하위 폴더)
       base-path: ${java.io.tmpdir}/community-test-uploads

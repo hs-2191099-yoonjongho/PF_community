@@ -3,7 +3,6 @@ package com.example.community.config;
 import com.example.community.security.JwtAuthenticationFilter;
 import com.example.community.service.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -22,10 +21,9 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.web.cors.CorsConfiguration;                          // CORS
-import org.springframework.web.cors.CorsConfigurationSource;                 // CORS
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;         // CORS
+import org.springframework.core.env.Environment;
+// CORS
 
-import java.time.Duration;
 import java.util.List;
 
 @Configuration
@@ -35,13 +33,12 @@ public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
     private final CustomUserDetailsService userDetailsService;
+    private final Environment env;
 
-    // ★ yml에서 허용 오리진을 받아와 trim/distinct 처리
-    @Value("${app.cors.allowed-origins}")
-    private String allowedOriginsRaw;
+    // 환경 변수 ALLOWED_ORIGINS를 우선 사용. 없으면 기본값.
     private List<String> allowedOrigins() {
-        if (allowedOriginsRaw == null || allowedOriginsRaw.isBlank()) return List.of();
-        return java.util.Arrays.stream(allowedOriginsRaw.split(","))
+        String raw = env.getProperty("ALLOWED_ORIGINS", "http://localhost:3000");
+        return java.util.Arrays.stream(raw.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .distinct()
@@ -76,7 +73,15 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .cors(Customizer.withDefaults()) // ★ 아래 CORS Bean 사용
+                .cors(c -> c.configurationSource(request -> {
+                    CorsConfiguration cfg = new CorsConfiguration();
+                    cfg.setAllowedOrigins(allowedOrigins());
+                    cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+                    cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With","Accept"));
+                    cfg.setAllowCredentials(true);
+                    cfg.setMaxAge(java.time.Duration.ofSeconds(3600));
+                    return cfg;
+                }))
                 .csrf(csrf -> csrf.disable())
         .headers(headers -> headers
             .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"))
@@ -108,22 +113,10 @@ public class SecurityConfig {
         return http.build();
     }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration cfg = new CorsConfiguration();
-    cfg.setAllowedOrigins(allowedOrigins()); // trim/distinct 반영
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS","HEAD")); // ★ PATCH 추가
-        cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With"));
-    cfg.setExposedHeaders(List.of("Content-Disposition"));  // 파일 다운로드용 헤더 노출
-        cfg.setAllowCredentials(true);                 // ★ 쿠키/인증정보 포함 허용
-        cfg.setMaxAge(Duration.ofHours(1));
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", cfg);
-        return source;
-    }
+    // 별도 CorsConfigurationSource Bean은 제거(단일화)
 
     @Bean
+    @SuppressWarnings("deprecation")
     public AuthenticationManager authenticationManager(PasswordEncoder encoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(userDetailsService);

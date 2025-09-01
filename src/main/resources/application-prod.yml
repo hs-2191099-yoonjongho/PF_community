@@ -25,6 +25,10 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    placeholders:
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
   servlet:
     multipart:
       max-file-size: 10MB
@@ -73,10 +77,11 @@ app:
   security:
     token-hash-algorithm: ${SECURITY_HASH_ALGORITHM:SHA-256}
     max-refresh-tokens-per-user: ${MAX_REFRESH_TOKENS:5}
-    enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:true}
+  # 운영도 CORS는 Security에서만. 별도 Origin 인터셉터는 기본 비활성화(필요시 환경변수로만 활성화)
+  enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:false}
+  public-base-url: ${PUBLIC_BASE_URL}
   storage:
     provider: local
-    public-base-url: ${PUBLIC_BASE_URL}
     local:
       # 프로덕션 환경에서는 컨테이너 내부 경로를 사용
       base-path: /app/uploads

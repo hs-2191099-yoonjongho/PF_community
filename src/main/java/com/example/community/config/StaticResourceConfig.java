@@ -18,7 +18,7 @@ public class StaticResourceConfig implements WebMvcConfigurer {
     @Value("${app.storage.local.base-path:uploads}")
     private String storagePath;
     
-    @Value("${app.storage.public-base-url}")
+    @Value("${app.public-base-url}")
     private String publicBaseUrl; // 예: http://localhost:8080/uploads
     
     @Override
