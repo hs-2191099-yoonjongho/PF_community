@@ -21,6 +21,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 
 import jakarta.servlet.http.Cookie;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.http.HttpHeaders;
 import com.example.community.repository.MemberRepository;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -34,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "refresh.cookie.path=/api/auth",
         "refresh.cookie.secure=false",
         "refresh.cookie.same-site=Lax",
-        "refresh.exp-ms=3600000"
+        "refresh.exp-ms=3600000",
+        "ALLOWED_ORIGINS=http://test1.example,http://test2.example"
 })
 @Import(AuthControllerSecurityTest.TestConfig.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -47,15 +49,16 @@ class AuthControllerSecurityTest {
     @Test
     @DisplayName("/api/auth/refresh - 헤더 없으면 403")
     void refresh_forbidden_without_header() throws Exception {
-    mvc.perform(post("/api/auth/refresh").with(csrf()).contentType(MediaType.APPLICATION_JSON))
+        mvc.perform(post("/api/auth/refresh").with(csrf()).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @DisplayName("/api/auth/refresh - 헤더는 있으나 쿠키 없으면 401")
     void refresh_unauthorized_without_cookie() throws Exception {
-    mvc.perform(post("/api/auth/refresh").with(csrf())
+        mvc.perform(post("/api/auth/refresh").with(csrf())
                         .header("X-Requested-With", "XMLHttpRequest")
+                        .header(HttpHeaders.ORIGIN, "http://test1.example")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
     }
@@ -70,8 +73,9 @@ class AuthControllerSecurityTest {
         when(refreshTokenService.rotate(token)).thenReturn("new");
         when(jwtUtil.generateAccessToken(anyString())).thenReturn("access");
 
-    mvc.perform(post("/api/auth/refresh").with(csrf())
+        mvc.perform(post("/api/auth/refresh").with(csrf())
                         .header("X-Requested-With", "XMLHttpRequest")
+                        .header(HttpHeaders.ORIGIN, "http://test1.example")
                         .cookie(new Cookie("refresh_token", "old"))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())

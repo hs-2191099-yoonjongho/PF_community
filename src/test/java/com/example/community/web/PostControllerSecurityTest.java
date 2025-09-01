@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
@@ -53,23 +53,23 @@ class PostControllerSecurityTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private PostService postService;
 
-        @MockBean(name = "postSecurity")
+        @MockitoBean(name = "postSecurity")
         private PostSecurity postSecurity;
     
     // 추가 필요한 모의 빈들 (컨트롤러 의존성에 따라 추가)
-    @MockBean
+    @MockitoBean
     private PostRepository postRepository;
 
-        @MockBean
+        @MockitoBean
         private PostLikeService postLikeService;
 
                 // SecurityConfig dependencies
-                @org.springframework.boot.test.mock.mockito.MockBean
+                @org.springframework.test.context.bean.override.mockito.MockitoBean
                 private com.example.community.config.JwtUtil jwtUtil;
-                @org.springframework.boot.test.mock.mockito.MockBean
+                @org.springframework.test.context.bean.override.mockito.MockitoBean
                 private com.example.community.service.CustomUserDetailsService customUserDetailsService;
 
     @Test
