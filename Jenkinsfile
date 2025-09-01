@@ -103,14 +103,17 @@ pipeline {
       steps {
         sh './gradlew --version'
         script {
-          def buildCmd = params.SKIP_TESTS ? './gradlew --no-daemon clean assemble -x test' : './gradlew --no-daemon clean build'
-          sh buildCmd
+      // 배포 브랜치(main/master)는 기본적으로 테스트를 건너뜁니다(외부 DB 의존성 회피). 필요 시 SKIP_TESTS=false로 강제 실행 가능.
+      def shouldSkip = params.SKIP_TESTS || (env.DEPLOY_ENABLED == 'true')
+      echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, SKIP_TESTS=${params.SKIP_TESTS})"
+      def buildCmd = shouldSkip ? './gradlew --no-daemon clean assemble -x test' : './gradlew --no-daemon clean build'
+      sh buildCmd
         }
       }
     }
 
     stage('Test Reports') {
-      when { expression { return !params.SKIP_TESTS } }
+    when { expression { return !params.SKIP_TESTS && env.DEPLOY_ENABLED != 'true' } }
       steps {
         junit allowEmptyResults: true, testResults: 'build/test-results/test/**/*.xml'
   archiveArtifacts allowEmptyArchive: true, artifacts: 'build/reports/tests/test/**'
