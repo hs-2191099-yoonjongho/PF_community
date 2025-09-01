@@ -20,7 +20,13 @@ pipeline {
     string(name: 'DEPLOY_ROLE_ARN', defaultValue: '', description: 'AWS IAM 배포 역할 ARN')
   // 운영 환경 SSM 프리픽스만 사용 (develop는 CI만)
   string(name: 'PROD_SSM_PREFIX', defaultValue: '/community-portfolio/prod', description: 'SSM 파라미터 프리픽스 (main/master → prod)')
+  booleanParam(name: 'RUN_TESTS_ON_DEPLOY', defaultValue: false, description: '배포 브랜치(main/master)에서도 테스트를 실행할지 여부(기본: 실행 안 함)')
   booleanParam(name: 'REQUIRE_PROD_APPROVAL', defaultValue: true, description: '운영 배포 전 수동 승인 필요 여부')
+
+  // Jenkins in Docker 환경에서 테스트 DB를 오버라이드할 때 사용 (예: host.docker.internal)
+  string(name: 'TEST_DB_URL', defaultValue: '', description: 'Optional: 테스트용 DB URL 오버라이드 (예: jdbc:mysql://host.docker.internal:3306/board_test?allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&connectionCollation=utf8mb4_0900_ai_ci)')
+  string(name: 'TEST_DB_USERNAME', defaultValue: '', description: 'Optional: 테스트용 DB 사용자명 오버라이드')
+  string(name: 'TEST_DB_PASSWORD', defaultValue: '', description: 'Optional: 테스트용 DB 비밀번호 오버라이드 (로그에 노출될 수 있으므로 로컬 개발 DB에만 사용 권장)')
   }
 
   environment {
@@ -103,17 +109,31 @@ pipeline {
       steps {
         sh './gradlew --version'
         script {
-      // 배포 브랜치(main/master)는 기본적으로 테스트를 건너뜁니다(외부 DB 의존성 회피). 필요 시 SKIP_TESTS=false로 강제 실행 가능.
-      def shouldSkip = params.SKIP_TESTS || (env.DEPLOY_ENABLED == 'true')
-      echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, SKIP_TESTS=${params.SKIP_TESTS})"
-      def buildCmd = shouldSkip ? './gradlew --no-daemon clean assemble -x test' : './gradlew --no-daemon clean build'
-      sh buildCmd
+          // 기본: CI는 테스트 수행, 배포 브랜치(main/master)는 기본 스킵. 필요시 RUN_TESTS_ON_DEPLOY=true로 강제 수행.
+          def shouldSkip = params.SKIP_TESTS || (env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY)
+          echo "Build: shouldSkipTests=${shouldSkip} (DEPLOY_ENABLED=${env.DEPLOY_ENABLED}, SKIP_TESTS=${params.SKIP_TESTS}, RUN_TESTS_ON_DEPLOY=${params.RUN_TESTS_ON_DEPLOY})"
+
+          String cmd
+          if (shouldSkip) {
+            cmd = './gradlew --no-daemon clean assemble -x test'
+          } else {
+            cmd = './gradlew --no-daemon clean build'
+            def props = []
+            if (params.TEST_DB_URL?.trim())      { props << "-DDB_URL='${params.TEST_DB_URL.trim()}'" }
+            if (params.TEST_DB_USERNAME?.trim()) { props << "-DDB_USERNAME='${params.TEST_DB_USERNAME.trim()}'" }
+            if (params.TEST_DB_PASSWORD?.trim()) { props << "-DDB_PASSWORD='${params.TEST_DB_PASSWORD.trim()}'" }
+            if (props) {
+              echo 'Tests will use custom DB_URL override.'
+              cmd = cmd + ' ' + props.join(' ')
+            }
+          }
+          sh cmd
         }
       }
     }
 
-    stage('Test Reports') {
-    when { expression { return !params.SKIP_TESTS && env.DEPLOY_ENABLED != 'true' } }
+  stage('Test Reports') {
+  when { expression { return !params.SKIP_TESTS && !(env.DEPLOY_ENABLED == 'true' && !params.RUN_TESTS_ON_DEPLOY) } }
       steps {
         junit allowEmptyResults: true, testResults: 'build/test-results/test/**/*.xml'
   archiveArtifacts allowEmptyArchive: true, artifacts: 'build/reports/tests/test/**'
