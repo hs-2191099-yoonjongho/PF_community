@@ -422,10 +422,10 @@ services:
       - ./uploads:/app/uploads
 YML
 
-docker compose pull || true
+docker-compose pull || true
 echo "Starting the application container with docker-compose..."
 # .env 파일을 명시적으로 지정하여 실행
-docker compose --env-file .env up -d
+docker-compose --env-file .env up -d
 
 # 헬스 체크 로직 개선
 echo "Waiting for health check (up to ~90s)..."
@@ -442,7 +442,7 @@ done
 
 if [ "$HEALTH_CHECK_PASSED" != "true" ]; then
   echo "Health check timed out. Showing container logs..."
-  docker compose logs --no-color app | tail -n 200 || true
+  docker-compose logs --no-color app | tail -n 200 || true
   echo "Container status:"
   docker ps -a | grep community-app || true
   exit 1
