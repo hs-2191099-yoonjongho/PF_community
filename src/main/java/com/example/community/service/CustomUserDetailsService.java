@@ -10,10 +10,13 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Spring Security를 위한 사용자 인증 정보 로딩 서비스
+ * 이메일 주소를 기반으로 사용자 정보를 조회하고 Spring Security가 사용할 UserDetails 객체를 생성합니다.
+ * 탈퇴한 회원의 로그인 시도를 방지하는 로직이 포함되어 있습니다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -24,11 +27,14 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Transactional(readOnly = true) 
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         Member m = members.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("사용자를 찾을 수 없습니다: " + email));
+                .orElseThrow(() -> {
+                    log.info("로그인 실패: 존재하지 않는 이메일 - {}", email);
+                    return new UsernameNotFoundException("사용자를 찾을 수 없습니다: " + email);
+                });
         
         // 탈퇴한 회원 로그인 방지
         if (!m.isActive()) {
-            log.warn("탈퇴한 회원의 로그인 시도: {}", email);
+            log.error("보안 경고: 탈퇴한 회원의 로그인 시도 - {}", email);
             throw new DisabledException("탈퇴한 회원입니다");
         }
         

@@ -89,6 +89,7 @@ class CommentControllerTest {
         // when & then
         mockMvc.perform(get("/api/posts/{postId}/comments", postId))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.content[0].id").value(1))
@@ -130,9 +131,10 @@ class CommentControllerTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(createReq)))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").value(1))
-            .andExpect(jsonPath("$.content").value(content))
-            .andExpect(jsonPath("$.author.username").value(author.getUsername()));
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.comment.id").value(1))
+            .andExpect(jsonPath("$.comment.content").value(content))
+            .andExpect(jsonPath("$.comment.author.username").value(author.getUsername()));
         
         // 서비스 메서드 호출 확인
         verify(commentService).add(eq(postId), eq(1L), eq(content));
@@ -179,7 +181,9 @@ class CommentControllerTest {
             .with(csrf())
             .with(user(new MemberDetails(1L, "test@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
             .header("Origin", "http://localhost:3000"))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.message").exists());
         
         // 서비스 메서드 호출 확인
         verify(commentService).delete(commentId);
@@ -222,7 +226,9 @@ class CommentControllerTest {
             .with(csrf())
             .with(user(new MemberDetails(99L, "admin@example.com", "pw", java.util.Set.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"), new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_USER")))))
             .header("Origin", "http://localhost:3000"))
-            .andExpect(status().isNoContent());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.message").exists());
         
         // 서비스 메서드 호출 확인 
         verify(commentService).delete(commentId);

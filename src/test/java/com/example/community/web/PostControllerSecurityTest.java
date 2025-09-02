@@ -5,6 +5,7 @@ import com.example.community.domain.Post;
 import com.example.community.security.PostSecurity;
 import com.example.community.service.PostService;
 import com.example.community.service.dto.PostDtos;
+import com.example.community.service.dto.PostSummaryDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,11 +62,11 @@ class PostControllerSecurityTest {
     @WithAnonymousUser
     void anonymousUserCanAccessPostList() throws Exception {
         // given
-        Page<Post> emptyPage = new PageImpl<>(new ArrayList<>());
-        when(postService.search(any(), any())).thenReturn(emptyPage);
+        Page<PostSummaryDto> emptyPage = new PageImpl<>(new ArrayList<>());
+        when(postService.searchSummary(any(), any())).thenReturn(emptyPage);
 
         // when & then
-        mockMvc.perform(get("/api/posts").header("Origin", "http://localhost:3000"))
+        mockMvc.perform(get("/api/posts/summary").header("Origin", "http://localhost:3000"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
     }
@@ -117,7 +118,7 @@ class PostControllerSecurityTest {
                 .build();
 
         when(postService.create(anyLong(), any(PostDtos.Create.class))).thenReturn(createdPost);
-        when(postSecurity.isNoticeAllowed(any(PostDtos.Create.class))).thenReturn(true);
+        when(postSecurity.isBoardTypeAllowed(any(BoardType.class))).thenReturn(true);
 
         // when & then
         mockMvc.perform(post("/api/posts")
@@ -142,7 +143,7 @@ class PostControllerSecurityTest {
         );
 
         // PostSecurity 모킹 - 일반 사용자는 공지사항 작성 불가
-        when(postSecurity.isNoticeAllowed(any(PostDtos.Create.class))).thenReturn(false);
+        when(postSecurity.isBoardTypeAllowed(any(BoardType.class))).thenReturn(false);
 
         // when & then
         mockMvc.perform(post("/api/posts")

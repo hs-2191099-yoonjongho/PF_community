@@ -40,11 +40,5 @@ public class StaticResourceConfig implements WebMvcConfigurer {
                 .setCachePeriod(3600) // 1시간 캐싱
                 .resourceChain(true);
         
-        // 운영 환경에서는 Nginx 설정으로 대체 권장:
-        // location /uploads/ { 
-        //     alias /절대/경로/uploads/; 
-        //     expires 1d;
-        //     add_header Cache-Control "public";
-        // }
     }
 }

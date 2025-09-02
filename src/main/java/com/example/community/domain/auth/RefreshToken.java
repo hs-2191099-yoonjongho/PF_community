@@ -38,7 +38,6 @@ public class RefreshToken extends BaseTimeEntity {
     private Instant expiresAt;
 
     @Column(nullable = false)
-    @Setter  // 💡 이것만 setter 허용 - 실제로 사용됨
     private boolean revoked;
     
     // 비즈니스 메서드: 토큰 폐기

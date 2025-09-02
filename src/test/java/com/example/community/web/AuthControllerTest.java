@@ -7,6 +7,7 @@ import com.example.community.repository.MemberRepository;
 import com.example.community.security.MemberDetails;
 import com.example.community.service.MemberService;
 import com.example.community.service.RefreshTokenService;
+import com.example.community.web.dto.AuthWebDtos;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -73,9 +74,7 @@ class AuthControllerTest {
     @DisplayName("로그인 성공 시 액세스 토큰과 리프레시 토큰 쿠키 반환")
     void loginSuccessTest() throws Exception {
         // given
-        AuthController.LoginReq loginRequest = new AuthController.LoginReq();
-        loginRequest.setEmail("test@example.com");
-        loginRequest.setPassword("password");
+        String loginRequestJson = "{\"email\":\"test@example.com\",\"password\":\"password\"}";
 
         Member testMember = Member.builder()
                 .id(1L)
@@ -105,10 +104,11 @@ class AuthControllerTest {
                 .with(csrf())
                 .header("Origin", "http://localhost:3000")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
+                .content(loginRequestJson))
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists("refresh_token"))
                 .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(header().exists("Cache-Control"))
                 .andExpect(jsonPath("$.accessToken").value("test.access.token"));
     }
 
@@ -144,6 +144,7 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists("refresh_token"))
                 .andExpect(cookie().value("refresh_token", "new-refresh-token"))
+                .andExpect(header().exists("Cache-Control"))
                 .andExpect(jsonPath("$.accessToken").value("new.access.token"));
     }
 
@@ -159,6 +160,7 @@ class AuthControllerTest {
                 .cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token-to-revoke")))
                 .andExpect(status().isOk())
                 .andExpect(cookie().exists("refresh_token"))
-                .andExpect(cookie().maxAge("refresh_token", 0));
+                .andExpect(cookie().maxAge("refresh_token", 0))
+                .andExpect(header().exists("Cache-Control"));
     }
 }

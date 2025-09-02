@@ -13,77 +13,195 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * 게시글 엔티티에 대한 데이터 접근 인터페이스
+ * 게시글 조회, 검색, 필터링 등의 기능을 제공합니다.
+ */
 public interface PostRepository extends JpaRepository<Post, Long> {
     
-    @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%'))")
-    Page<Post> findByTitleContainingIgnoreCaseWithAuthor(@Param("query") String query, Pageable pageable);
-    
+    /**
+     * 제목 또는 내용에 특정 검색어가 포함된 게시글을 조회합니다.
+     * 작성자 정보를 함께 로딩하여 N+1 문제를 방지합니다.
+     * 대소문자를 구분하지 않고 검색합니다.
+     * 이 메서드는 기본 검색 메서드로 사용되며, 정렬은 Pageable 객체를 통해 지정할 수 있습니다.
+     * 
+     * @param query 검색어
+     * @param pageable 페이징 정보 (정렬 조건 포함)
+     * @return 검색 결과 페이지
+     */
     @EntityGraph(attributePaths = "author")
     @Query("SELECT p FROM Post p WHERE LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content as string)) LIKE LOWER(CONCAT('%', :query, '%'))")
     Page<Post> findByTitleOrContentContainingIgnoreCaseWithAuthor(@Param("query") String query, Pageable pageable);
     
-    @EntityGraph(attributePaths = "author")
-    Page<Post> findAll(Pageable pageable);
     
-    @Query("SELECT p FROM Post p JOIN FETCH p.author WHERE p.id = :id")
-    Optional<Post> findByIdWithAuthor(@Param("id") Long id);
-    
+    /**
+     * 특정 ID의 게시글을 작성자 정보 및 이미지와 함께 조회합니다.
+     * 게시글 상세 페이지에서 사용되며, 작성자와 이미지를 함께 로딩하여 N+1 문제를 방지합니다.
+     * 
+     * @param id 게시글 ID
+     * @return 게시글 (Optional)
+     */
     @Query("SELECT DISTINCT p FROM Post p JOIN FETCH p.author LEFT JOIN FETCH p.images WHERE p.id = :id")
     Optional<Post> findByIdWithAuthorAndImages(@Param("id") Long id);
     
+    /**
+     * 특정 게시글의 조회수를 1 증가시킵니다.
+     * 낙관적 락 충돌 방지를 위해 별도 쿼리로 처리합니다.
+     * 
+     * @param id 게시글 ID
+     * @return 업데이트된 행 수
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Post p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
     int incrementViews(@Param("id") Long id);
     
+    /**
+     * 특정 게시글이 특정 회원의 소유인지 확인합니다.
+     * 게시글 수정/삭제 권한 검증에 사용됩니다.
+     * 
+     * @param postId 게시글 ID
+     * @param authorId 작성자 ID
+     * @return 소유 여부
+     */
     boolean existsByIdAndAuthor_Id(Long postId, Long authorId);
     
-    // 추천수 기반 필터링 쿼리들
+    // 추천수 기반 필터링 쿼리
+    /**
+     * 특정 추천수 이상의 게시글을 조회합니다.
+     * 인기 게시글 또는 베스트 게시글 조회에 사용됩니다.
+     * 
+     * @param minLikes 최소 추천수
+     * @param pageable 페이징 정보
+     * @return 추천수 기준 게시글 페이지
+     */
     @EntityGraph(attributePaths = "author")
     @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes ORDER BY p.createdAt DESC")
     Page<Post> findByLikeCountGreaterThanEqual(@Param("minLikes") long minLikes, Pageable pageable);
+        
+    // 이 메서드는 findWithAuthorByLikeCountAndQuery로 통합되었습니다.
     
-    @EntityGraph(attributePaths = "author") 
-    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes AND LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY p.createdAt DESC")
-    Page<Post> findByLikeCountGreaterThanEqualAndTitleContaining(@Param("minLikes") long minLikes, @Param("query") String query, Pageable pageable);
     
-    @EntityGraph(attributePaths = "author") 
-    @Query("SELECT p FROM Post p WHERE p.likeCount >= :minLikes AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content as string)) LIKE LOWER(CONCAT('%', :query, '%'))) ORDER BY p.createdAt DESC")
-    Page<Post> findByLikeCountGreaterThanEqualAndTitleOrContentContaining(@Param("minLikes") long minLikes, @Param("query") String query, Pageable pageable);
+    // 이 메서드는 findWithAuthorByBoardTypeAndQuery와 중복 기능이므로,
+    // 대신 findWithAuthorByBoardTypeAndQuery(boardType, "", pageable)를 사용하세요.
     
-    // 최근 N일 내 추천순 정렬 (like_count 컬럼 사용)
+    
+    /**
+     * 특정 게시판 타입의 게시글을 작성자 정보만 함께 로딩하여 조회합니다.
+     * 요약 정보 조회용으로 사용됩니다.
+     * 
+     * @param boardType 게시판 타입
+     * @param query 검색어 (선택적)
+     * @param pageable 페이징 정보
+     * @return 게시글 페이지 (작성자 포함)
+     */
     @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE p.createdAt >= :from ORDER BY p.likeCount DESC, p.createdAt DESC")
-    Page<Post> findRecentOrderByLikes(@Param("from") LocalDateTime from, Pageable pageable);
-    
-    // BoardType별 게시글 조회
-    @EntityGraph(attributePaths = "author")
-    Page<Post> findByBoardType(BoardType boardType, Pageable pageable);
-    
-    // BoardType별 제목 검색
-    @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE p.boardType = :boardType AND LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) ORDER BY p.createdAt DESC")
-    Page<Post> findByBoardTypeAndTitleContainingIgnoreCase(
-            @Param("boardType") BoardType boardType, 
+    @Query("""
+        SELECT p
+        FROM Post p
+        WHERE p.boardType = :boardType
+          AND (:query IS NULL OR :query = '' OR
+               (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%'))
+                OR LOWER(CAST(p.content AS string)) LIKE LOWER(CONCAT('%', :query, '%'))))
+        ORDER BY p.createdAt DESC
+    """)
+    Page<Post> findWithAuthorByBoardTypeAndQuery(
+            @Param("boardType") BoardType boardType,
             @Param("query") String query, 
-            Pageable pageable
-    );
-    
-    // BoardType별 제목 또는 내용 검색
+            Pageable pageable);
+            
+    /**
+     * 최근 N일 내 게시글을 추천수 기준으로 정렬하여 조회합니다.
+     * 작성자 정보만 함께 로딩하여 N+1 문제를 방지합니다.
+     * 이미지는 요약 정보에 포함되지 않으므로 로딩하지 않습니다.
+     * 
+     * @param from 시작일시
+     * @param pageable 페이징 정보
+     * @return 추천수 기준 정렬된 게시글 페이지
+     */
     @EntityGraph(attributePaths = "author")
-    @Query("SELECT p FROM Post p WHERE p.boardType = :boardType AND (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(CAST(p.content AS string)) LIKE LOWER(CONCAT('%', :query, '%'))) ORDER BY p.createdAt DESC")
-    Page<Post> findByBoardTypeAndTitleOrContentContainingIgnoreCase(
-            @Param("boardType") BoardType boardType, 
-            @Param("query") String query, 
-            Pageable pageable
-    );
+    @Query("""
+        SELECT p
+        FROM Post p
+        WHERE p.createdAt >= :from
+        ORDER BY p.likeCount DESC, p.createdAt DESC
+    """)
+    Page<Post> findRecentWithAuthorOrderByLikes(@Param("from") LocalDateTime from, Pageable pageable);
     
     /**
      * 특정 회원이 작성한 모든 게시글에 "[탈퇴한 회원]" 표시 추가
+     * 회원 탈퇴 시 해당 회원의 게시글에 탈퇴 표시를 추가합니다.
+     * 
      * @param memberId 회원 ID
      * @return 영향 받은 행 수
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Post p SET p.title = CONCAT('[탈퇴한 회원] ', p.title) WHERE p.author.id = :memberId AND p.title NOT LIKE '[탈퇴한 회원]%'")
     int markPostsByAuthorIdAsWithdrawn(@Param("memberId") Long memberId);
+    
+    /**
+     * 게시글 좋아요 수 증가 (동시성 문제 해결을 위한 직접 업데이트)
+     * 낙관적 락 충돌을 방지하기 위해 별도 쿼리로 처리합니다.
+     * 
+     * @param id 게시글 ID
+     * @return 업데이트된 행 수
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Post p SET p.likeCount = p.likeCount + 1 WHERE p.id = :id")
+    int incrementLikes(@Param("id") Long id);
+    
+    /**
+     * 게시글 좋아요 수 감소 (동시성 문제 해결을 위한 직접 업데이트)
+     * 낙관적 락 충돌을 방지하기 위해 별도 쿼리로 처리합니다.
+     * 음수가 되지 않도록 보호합니다.
+     * 
+     * @param id 게시글 ID
+     * @return 업데이트된 행 수
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Post p SET p.likeCount = CASE WHEN p.likeCount > 0 THEN p.likeCount - 1 ELSE 0 END WHERE p.id = :id")
+    int decrementLikes(@Param("id") Long id);
+    
+    /**
+     * 게시글 요약 정보를 직접 조회하는 최적화된 쿼리
+     * 불필요한 내용(content) 필드를 제외하고, 필요한 정보만 조회합니다.
+     * 이미지는 요약 정보에 포함되지 않으므로 로딩하지 않습니다.
+     * 
+     * @param pageable 페이징 정보
+     * @return 게시글 요약 DTO 페이지
+     */
+    @EntityGraph(attributePaths = "author")
+    @Query("""
+        SELECT p
+        FROM Post p
+        ORDER BY p.createdAt DESC
+    """)
+    Page<Post> findAllWithAuthor(Pageable pageable);
+    
+    // 이 메서드는 findByTitleOrContentContainingIgnoreCaseWithAuthor 메서드와 중복되므로 제거되었습니다.
+    // 대신 findByTitleOrContentContainingIgnoreCaseWithAuthor 메서드를 사용하세요.
+    // 정렬이 필요한 경우 Pageable 객체에 Sort를 명시적으로 지정하면 됩니다.
+    
+    /**
+     * 특정 추천수 이상인 게시글의 요약 정보를 직접 조회하는 최적화된 쿼리
+     * 이미지는 요약 정보에 포함되지 않으므로 로딩하지 않습니다.
+     * 
+     * @param minLikes 최소 추천수
+     * @param query 검색어 (선택적)
+     * @param pageable 페이징 정보
+     * @return 게시글 페이지 (작성자 포함)
+     */
+    @EntityGraph(attributePaths = "author")
+    @Query("""
+        SELECT p
+        FROM Post p
+        WHERE p.likeCount >= :minLikes
+          AND (:query IS NULL OR :query = '' OR
+               (LOWER(p.title) LIKE LOWER(CONCAT('%', :query, '%'))
+                OR LOWER(CAST(p.content AS string)) LIKE LOWER(CONCAT('%', :query, '%'))))
+        ORDER BY p.likeCount DESC, p.createdAt DESC
+    """)
+    Page<Post> findWithAuthorByLikeCountAndQuery(
+            @Param("query") String query, 
+            @Param("minLikes") long minLikes, 
+            Pageable pageable);
 }

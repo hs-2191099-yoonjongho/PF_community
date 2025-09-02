@@ -36,7 +36,7 @@ public class Post extends BaseTimeEntity {
 
     @Builder.Default  // Builder 패턴에서 기본값 설정
     @Column(nullable = false)
-    private long likeCount = 0L;  // 추천수 필드 추가
+    private long likeCount = 0L;  
 
     @Version // 낙관적 락으로 동시성 제어
     private Long version;
@@ -48,18 +48,6 @@ public class Post extends BaseTimeEntity {
     // 비즈니스 메서드: 조회수 증가
     public void incrementViewCount() {
         this.viewCount++;
-    }
-    
-    // 비즈니스 메서드: 추천수 증가
-    public void incrementLikeCount() {
-        this.likeCount++;
-    }
-    
-    // 비즈니스 메서드: 추천수 감소 (추천 취소)
-    public void decrementLikeCount() {
-        if (this.likeCount > 0) {
-            this.likeCount--;
-        }
     }
     
     // 비즈니스 메서드: 게시글 내용 수정

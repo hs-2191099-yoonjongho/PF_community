@@ -28,7 +28,7 @@ class PostRepositoryTest {
         posts.save(Post.builder().title("a").content("c").boardType(BoardType.FREE).author(m).build());
         posts.save(Post.builder().title("b").content("c").boardType(BoardType.FREE).author(m).build());
 
-        Page<Post> page = posts.findByBoardType(BoardType.FREE, PageRequest.of(0, 10));
+        Page<Post> page = posts.findWithAuthorByBoardTypeAndQuery(BoardType.FREE, "", PageRequest.of(0, 10));
         assertThat(page.getTotalElements()).isEqualTo(2);
     }
 }

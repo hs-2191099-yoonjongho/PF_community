@@ -1,13 +1,13 @@
 package com.example.community.config;
 
+import com.example.community.security.CustomAccessDeniedHandler;
+import com.example.community.security.CustomAuthenticationEntryPoint;
 import com.example.community.security.JwtAuthenticationFilter;
 import com.example.community.service.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -17,12 +17,10 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.AccessDeniedHandler;
-import org.springframework.web.cors.CorsConfiguration;                          // CORS
+import org.springframework.web.cors.CorsConfiguration;                        
 import org.springframework.core.env.Environment;
-// CORS
+import com.example.community.repository.MemberRepository;
 
 import java.util.List;
 
@@ -34,6 +32,9 @@ public class SecurityConfig {
     private final JwtUtil jwtUtil;
     private final CustomUserDetailsService userDetailsService;
     private final Environment env;
+    private final MemberRepository memberRepository;
+    private final CustomAuthenticationEntryPoint authenticationEntryPoint;
+    private final CustomAccessDeniedHandler accessDeniedHandler;
 
     // 환경 변수 ALLOWED_ORIGINS를 우선 사용. 없으면 기본값.
     private List<String> allowedOrigins() {
@@ -43,31 +44,6 @@ public class SecurityConfig {
                 .filter(s -> !s.isBlank())
                 .distinct()
                 .toList();
-    }
-
-    @Bean
-    public AuthenticationEntryPoint authenticationEntryPoint() {
-        return (request, response, authException) -> {
-            response.setStatus(HttpStatus.UNAUTHORIZED.value());
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.setHeader("WWW-Authenticate", "Bearer realm=\"api\"");
-            response.getWriter().write(
-                    "{\"error\":\"인증에 실패했습니다\",\"details\":\"로그인이 필요합니다\"}"
-            );
-        };
-    }
-
-    @Bean
-    public AccessDeniedHandler accessDeniedHandler() {
-        return (request, response, accessDeniedException) -> {
-            response.setStatus(HttpStatus.FORBIDDEN.value());
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setCharacterEncoding("UTF-8");
-            response.getWriter().write(
-                    "{\"error\":\"접근이 거부되었습니다\",\"details\":\"해당 리소스에 대한 권한이 없습니다\"}"
-            );
-        };
     }
 
     @Bean
@@ -91,8 +67,8 @@ public class SecurityConfig {
         )
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint(authenticationEntryPoint())
-                        .accessDeniedHandler(accessDeniedHandler())
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // preflight
@@ -106,14 +82,13 @@ public class SecurityConfig {
                 );
 
         http.addFilterBefore(
-                new JwtAuthenticationFilter(jwtUtil, userDetailsService),
+                new JwtAuthenticationFilter(jwtUtil, userDetailsService, memberRepository),
                 org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class
         );
 
         return http.build();
     }
 
-    // 별도 CorsConfigurationSource Bean은 제거(단일화)
 
     @Bean
     @SuppressWarnings("deprecation")

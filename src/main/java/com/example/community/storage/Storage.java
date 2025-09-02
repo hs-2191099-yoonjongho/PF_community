@@ -4,13 +4,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 파일 저장소 인터페이스
- * 로컬, S3 등 다양한 스토리지 구현체를 지원합니다.
- * 
  * 파일 키는 '{directory}/{memberId}/{uuid.ext}' 형식의 전체 경로를 사용합니다.
- * 이는 다음과 같은 이점이 있습니다:
- * 1. 회원별 파일 분리로 접근 제어 강화
- * 2. 고유 식별자로 파일명 충돌 방지
- * 3. 원본 확장자 유지로 파일 유형 식별 용이
+ * 모든 메서드는 경로 안전성을 검증하며, 안전하지 않은 경로 접근 시 StorageException을 발생시킵니다.
  */
 public interface Storage {
     /**
@@ -24,11 +19,10 @@ public interface Storage {
     /**
      * 파일 저장 (지정된 키 사용)
      * @param file 업로드된 파일
-     * @param directory 저장 디렉토리 (key가 전체 경로를 포함하므로 이 매개변수는 무시될 수 있음)
      * @param key 저장 파일 키 (전체 경로를 포함한 고유 식별자, 예: 'posts/1234/file.jpg')
      * @return 저장된 파일 정보
      */
-    StoredFile store(MultipartFile file, String directory, String key) throws StorageException;
+    StoredFile storeWithKey(MultipartFile file, String key) throws StorageException;
     
     /**
      * 파일 삭제
@@ -40,15 +34,17 @@ public interface Storage {
      * 파일 URL 생성
      * @param key 파일 키 (전체 경로를 포함한 고유 식별자)
      * @return 접근 가능한 URL
+     * @throws StorageException 경로가 안전하지 않거나 처리 중 오류 발생 시
      */
-    String url(String key);
+    String url(String key) throws StorageException;
     
     /**
      * 파일 존재 여부 확인
      * @param key 파일 키 (전체 경로를 포함한 고유 식별자)
      * @return 존재 여부
+     * @throws StorageException 경로가 안전하지 않거나 처리 중 오류 발생 시
      */
-    boolean exists(String key);
+    boolean exists(String key) throws StorageException;
 
     /**
      * 저장된 파일 정보

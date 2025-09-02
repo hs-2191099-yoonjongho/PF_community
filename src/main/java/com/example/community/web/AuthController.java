@@ -5,28 +5,29 @@ import com.example.community.domain.Member;
 import com.example.community.domain.auth.RefreshToken;
 import com.example.community.repository.MemberRepository;
 import com.example.community.service.MemberService;
-import com.example.community.service.dto.AuthDtos;
 import com.example.community.service.RefreshTokenService;
-import jakarta.servlet.http.HttpServletRequest;                 // ★ 추가
+import com.example.community.service.exception.TokenReuseDetectedException;
+import com.example.community.web.dto.AuthWebDtos;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;                        // ★ 추가
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Arrays;
+import java.util.Map;
 
-import java.time.Duration;
-
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
@@ -46,82 +47,94 @@ public class AuthController {
     @Value("${refresh.cookie.domain:}") private String cookieDomain; // ★ 선택(없으면 빈 문자열)
     @Value("${ALLOWED_ORIGINS:http://localhost:3000}") private String allowedOriginsStr;
     
-    // 허용된 Origin 목록 가져오기
+    // 허용된 Origin 목록 - 성능 최적화를 위해 계산 결과 캐싱
+    private List<String> allowedOrigins;
+    
+    // 허용된 Origin 목록 가져오기 (지연 초기화)
     private List<String> getAllowedOrigins() {
-        return Arrays.stream(allowedOriginsStr.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .distinct()
-                .toList();
+        if (allowedOrigins == null) {
+            allowedOrigins = Arrays.stream(allowedOriginsStr.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .distinct()
+                    .toList();
+        }
+        return allowedOrigins;
     }
 
     /* 회원가입 */
     @PostMapping("/signup")
-    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest req) {
+    public ResponseEntity<?> signup(@Valid @RequestBody AuthWebDtos.SignupRequest req) {
         try {
-            // DTO 변환하여 Service 로직 활용
-            AuthDtos.SignUp dto = new AuthDtos.SignUp(
-                req.getUsername(), 
-                req.getEmail(), 
-                req.getPassword()
-            );
-            
-            memberService.signUp(dto);
-            return ResponseEntity.ok("회원가입 성공");
+            // 웹 DTO를 서비스 DTO로 변환하여 서비스 계층에 전달
+            memberService.signUp(req.toServiceDto());
+            return ResponseEntity.ok().body(Map.of("success", true, "message", "회원가입 성공"));
             
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
         }
     }
 
     /* 로그인: Access 발급 + Refresh 쿠키 */
     @PostMapping("/login")
-    public ResponseEntity<TokenRes> login(@Valid @RequestBody LoginReq req) {
+    public ResponseEntity<AuthWebDtos.TokenResponse> login(@Valid @RequestBody AuthWebDtos.LoginRequest req) {
         var auth = am.authenticate(new UsernamePasswordAuthenticationToken(req.getEmail(), req.getPassword()));
         var principal = (com.example.community.security.MemberDetails) auth.getPrincipal();
 
         Member user = members.findByEmail(principal.getUsername())
-                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + principal.getUsername()));
+                .orElseThrow(() -> new IllegalArgumentException("사용자 정보를 찾을 수 없습니다"));
         String access = jwt.generateAccessToken(principal.getUsername());
         String refreshRaw = refreshTokenService.issue(user);
 
-        ResponseCookie.ResponseCookieBuilder lb = ResponseCookie.from(cookieName, refreshRaw)
-                .httpOnly(true).secure(cookieSecure).path(cookiePath)
-                .maxAge(Duration.ofMillis(refreshExpMs))
-                .sameSite(sameSite);
-        if (!cookieDomain.isBlank()) lb.domain(cookieDomain);        // ★ domain 적용(필요 시)
-        ResponseCookie loginCookie = lb.build();
+        ResponseCookie loginCookie = createCookie(refreshRaw, refreshExpMs);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, loginCookie.toString()) // ★ 상수 사용
-                .body(new TokenRes(access));
+                .header(HttpHeaders.CACHE_CONTROL, "no-store") // 캐시 방지
+                .body(new AuthWebDtos.TokenResponse(access));
     }
 
     /* 리프레시: 새 Access + (회전된) 새 Refresh 쿠키 */
     @PostMapping("/refresh")
-    public ResponseEntity<TokenRes> refresh(HttpServletRequest req) { // ★ @CookieValue → Request 직접 읽기
+    public ResponseEntity<?> refresh(HttpServletRequest req) { // ★ 와일드카드 타입으로 변경
         // CSRF 완화: 커스텀 헤더 강제(X-Requested-With)
         String xrw = req.getHeader("X-Requested-With");
         if (xrw == null || !"XMLHttpRequest".equalsIgnoreCase(xrw)) {
-            return ResponseEntity.status(403).build();
+            return ResponseEntity.status(403).body(Map.of("message", "AJAX 요청이 필요합니다"));
         }
         
         // Origin 헤더 검증
         String origin = req.getHeader("Origin");
         List<String> allowedOrigins = getAllowedOrigins();
         if (origin == null || !allowedOrigins.contains(origin)) {
-            return ResponseEntity.status(403).body(new TokenRes("Invalid origin"));
+            return ResponseEntity.status(403).body(Map.of("message", "허용되지 않은 출처의 요청입니다"));
         }
         
-    // 1) 쿠키에서 refresh 읽기 (설정된 이름으로)
+        // 1) 쿠키에서 refresh 읽기 (설정된 이름으로)
         String refreshRaw = readCookie(req, cookieName);              // ★ 이름 일관화
-        if (refreshRaw == null || refreshRaw.isBlank())
-            return ResponseEntity.status(401).build();
+        if (refreshRaw == null || refreshRaw.isBlank()) {
+            return unauthorizedWithCookieDelete("리프레시 토큰이 없습니다");
+        }
 
         // 2) 서버 저장소에서 유효성 검사(만료/폐기 여부 포함)
-        RefreshToken current = refreshTokenService.validateAndGet(refreshRaw);
-        if (current == null)
-            return ResponseEntity.status(401).build();
+        RefreshToken current = null;
+        try {
+            current = refreshTokenService.validateAndGet(refreshRaw);
+        } catch (TokenReuseDetectedException e) {
+            // 로그에 토큰 재사용 공격 시도 기록
+            log.warn("토큰 재사용 공격 감지: ip={}, ua={}", 
+                    req.getRemoteAddr(), req.getHeader("User-Agent"), e);
+            // 쿠키를 즉시 삭제하고 401 응답을 반환
+            return unauthorizedWithCookieDelete("보안 위협이 감지되었습니다. 다시 로그인해주세요.");
+        } catch (Exception e) {
+
+            log.debug("리프레시 토큰 검증 실패: {}", e.getMessage());
+            return unauthorizedWithCookieDelete("유효하지 않은 리프레시 토큰입니다");
+        }
+        
+        if (current == null) {
+            return unauthorizedWithCookieDelete("유효하지 않은 리프레시 토큰입니다");
+        }
 
         // 3) 회전(rotate): 기존 토큰 무효화 + 새 refresh 발급
         String newRaw = refreshTokenService.rotate(current);
@@ -130,71 +143,96 @@ public class AuthController {
         String access = jwt.generateAccessToken(current.getUser().getEmail());
 
         // 5) 동일 속성으로 새 refresh 쿠키 설정
-        ResponseCookie.ResponseCookieBuilder rb = ResponseCookie.from(cookieName, newRaw)
-                .httpOnly(true).secure(cookieSecure).path(cookiePath)
-                .maxAge(Duration.ofMillis(refreshExpMs))
-                .sameSite(sameSite);
-        if (!cookieDomain.isBlank()) rb.domain(cookieDomain);         // ★ domain 적용(필요 시)
-        ResponseCookie rc = rb.build();
+        ResponseCookie refreshCookie = createCookie(newRaw, refreshExpMs);
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, rc.toString())
-                .body(new TokenRes(access));
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store") // 캐시 방지
+                .body(new AuthWebDtos.TokenResponse(access));
     }
 
     /* 로그아웃: Refresh 폐기 + 쿠키 삭제(동일 속성 + Max-Age=0) */
     @PostMapping("/logout")
-    public ResponseEntity<String> logout(HttpServletRequest req) {   // ★ @CookieValue 제거
+    public ResponseEntity<?> logout(HttpServletRequest req, @AuthenticationPrincipal com.example.community.security.MemberDetails me) {
         // Origin 헤더 검증
         String origin = req.getHeader("Origin");
         List<String> allowedOrigins = getAllowedOrigins();
         if (origin == null || !allowedOrigins.contains(origin)) {
-            return ResponseEntity.status(403).body("Invalid origin");
+            return ResponseEntity.status(403).body(Map.of("message", "허용되지 않은 출처의 요청입니다"));
         }
         
-        String refreshRaw = readCookie(req, cookieName);             // ★ 이름 일관화
+        // 리프레시 토큰 폐기
+        String refreshRaw = readCookie(req, cookieName);
         if (refreshRaw != null && !refreshRaw.isBlank()) {
             refreshTokenService.revoke(refreshRaw);
         }
+        
+        // 인증된 사용자인 경우 토큰 버전 증가 (모든 액세스 토큰 무효화)
+        if (me != null) {
+            members.findById(me.id())
+                   .ifPresent(member -> {
+                       member.bumpTokenVersion();
+                       members.save(member);
+                   });
+        }
 
-        ResponseCookie.ResponseCookieBuilder db = ResponseCookie.from(cookieName, "")
-                .httpOnly(true).secure(cookieSecure).path(cookiePath)
-                .maxAge(0)                                           // ★ 삭제
-                .sameSite(sameSite);
-        if (!cookieDomain.isBlank()) db.domain(cookieDomain);        // ★ domain 적용(필요 시)
-        ResponseCookie deleteCookie = db.build();
+        ResponseCookie deleteCookie = createCookie("", 0); // 쿠키 삭제를 위해 수명을 0으로 설정
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, deleteCookie.toString())
-                .body("ok");
+                .header(HttpHeaders.CACHE_CONTROL, "no-store") // 캐시 방지
+                .body(Map.of("success", true, "message", "로그아웃 성공"));
     }
 
-    /* ===== DTOs ===== */
-    @Data
-    static class SignupRequest {
-        @NotBlank private String username;
-        @Email @NotBlank private String email;
-        @NotBlank private String password;
-    }
-
-    @Data
-    static class LoginReq {
-        @Email @NotBlank private String email;
-        @NotBlank private String password;
-    }
-
-    @Data
-    static class TokenRes {
-        private final String accessToken;
-    }
-
-    /* ===== 내부 유틸: 쿠키 읽기 ===== */
-    private String readCookie(HttpServletRequest req, String name) {  // ★ 공통 유틸
+    /**
+     * HTTP 요청의 쿠키에서 특정 이름의 쿠키 값을 추출
+     * @param req HTTP 요청
+     * @param name 찾을 쿠키 이름
+     * @return 쿠키 값, 없으면 null
+     */
+    private String readCookie(HttpServletRequest req, String name) {
         var cs = req.getCookies();
         if (cs == null) return null;
         for (var c : cs) {
             if (name.equals(c.getName())) return c.getValue();
         }
         return null;
+    }
+    
+    /**
+     * 일관된 설정의 ResponseCookie를 생성합니다.
+     * @param value 쿠키 값
+     * @param maxAge 쿠키 수명(밀리초)
+     * @return 생성된 ResponseCookie
+     */
+    private ResponseCookie createCookie(String value, long maxAge) {
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(cookieName, value)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path(cookiePath)
+                .maxAge(Duration.ofMillis(maxAge))
+                .sameSite(sameSite);
+                
+        if (!cookieDomain.isBlank()) {
+            builder.domain(cookieDomain);
+        }
+        
+        return builder.build();
+    }
+    
+    /**
+     * 401 Unauthorized 응답과 함께 리프레시 토큰 쿠키를 삭제하는 응답을 생성합니다.
+     * 인증 실패 또는 토큰 재사용 감지 시 사용됩니다.
+     * 
+     * @param message 오류 메시지
+     * @return 쿠키 삭제와 함께 401 응답
+     */
+    private ResponseEntity<?> unauthorizedWithCookieDelete(String message) {
+        ResponseCookie deleteCookie = createCookie("", 0); // 쿠키 수명 0으로 설정하여 즉시 삭제
+        
+        return ResponseEntity.status(401)
+                .header(HttpHeaders.SET_COOKIE, deleteCookie.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")  // 캐시 방지
+                .body(Map.of("success", false, "message", message));
     }
 }

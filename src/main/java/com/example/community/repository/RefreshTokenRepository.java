@@ -7,7 +7,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
@@ -17,10 +16,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     
     // 모든 토큰 조회 (재사용 탐지용)
     Optional<RefreshToken> findByTokenHash(String tokenHash);
-    
-    // 사용자별 활성 토큰 목록
-    List<RefreshToken> findByUser_IdAndRevokedFalse(Long userId);
-    
+      
     // 만료된 토큰 자동 청소 (운영 효율성)
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM RefreshToken rt WHERE rt.expiresAt < :now")

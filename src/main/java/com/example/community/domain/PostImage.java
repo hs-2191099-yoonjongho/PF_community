@@ -34,7 +34,7 @@ public class PostImage extends BaseTimeEntity {
     @Column(nullable = false)
     private String url;  // 접근 가능한 URL
 
-    // 편의 메서드: 포스트 연결
+    // 포스트 연결
     public void setPost(Post post) {
         this.post = post;
     }

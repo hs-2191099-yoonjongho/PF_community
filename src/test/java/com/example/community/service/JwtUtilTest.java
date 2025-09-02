@@ -1,26 +1,36 @@
 package com.example.community.service;
 
 import com.example.community.config.JwtUtil;
+import com.example.community.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.lang.reflect.Field;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 class JwtUtilTest {
 
     private JwtUtil jwtUtil;
+    
+    @Mock
+    private MemberRepository memberRepository;
 
     @BeforeEach
     void setUp() throws Exception {
-        jwtUtil = new JwtUtil();
+        MockitoAnnotations.openMocks(this);
+        jwtUtil = new JwtUtil(memberRepository);
         set(jwtUtil, "secret", "local-test-secret-min-32-chars-1234567890");
         set(jwtUtil, "accessExpMs", 3600000L);
         set(jwtUtil, "issuer", "community-app");
-    // call @PostConstruct
-    invokeInit(jwtUtil);
+        // 테스트를 위한 모의 데이터 설정
+        when(memberRepository.findTokenVersionByEmail("test@example.com")).thenReturn(0);
+        // call @PostConstruct
+        invokeInit(jwtUtil);
     }
 
     @Test

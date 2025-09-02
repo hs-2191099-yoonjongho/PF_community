@@ -1,5 +1,6 @@
 package com.example.community.util;
 
+import com.example.community.common.FilePolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -25,10 +26,10 @@ class FileTypeValidatorTest {
                 new byte[]{'R','I','F','F',0,0,0,0,'W','E','B','P'});
 
         Set<String> allowed = Set.of("image/png","image/jpeg","image/gif","image/webp");
-        assertThat(FileTypeValidator.isAllowed(png, allowed)).isTrue();
-        assertThat(FileTypeValidator.isAllowed(jpg, allowed)).isTrue();
-        assertThat(FileTypeValidator.isAllowed(gif, allowed)).isTrue();
-        assertThat(FileTypeValidator.isAllowed(webp, allowed)).isTrue();
+        assertThat(FilePolicy.isAllowed(png, allowed)).isTrue();
+        assertThat(FilePolicy.isAllowed(jpg, allowed)).isTrue();
+        assertThat(FilePolicy.isAllowed(gif, allowed)).isTrue();
+        assertThat(FilePolicy.isAllowed(webp, allowed)).isTrue();
     }
 
     @Test
@@ -37,6 +38,6 @@ class FileTypeValidatorTest {
         // MIME은 png인데 내용은 텍스트 -> 차단
         MockMultipartFile fake = new MockMultipartFile("f","a.png","image/png","oops".getBytes(StandardCharsets.UTF_8));
         Set<String> allowed = Set.of("image/png","image/jpeg","image/gif","image/webp");
-        assertThat(FileTypeValidator.isAllowed(fake, allowed)).isFalse();
+        assertThat(FilePolicy.isAllowed(fake, allowed)).isFalse();
     }
 }

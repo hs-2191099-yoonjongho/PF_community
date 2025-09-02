@@ -7,6 +7,7 @@ import com.example.community.repository.MemberRepository;
 import com.example.community.repository.PostImageRepository;
 import com.example.community.repository.PostRepository;
 import com.example.community.service.dto.PostDtos;
+import com.example.community.service.dto.PostSummaryDto;
 import com.example.community.service.exception.EntityNotFoundException;
 import com.example.community.storage.Storage;
 import org.junit.jupiter.api.BeforeEach;
@@ -264,14 +265,13 @@ class PostServiceTest {
                 .thenReturn(postPage);
                 
         // when
-        Page<Post> result = postService.search(searchQuery, pageable);
+        Page<PostSummaryDto> result = postService.searchSummary(searchQuery, pageable);
         
         // then
         assertThat(result).isNotNull();
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getTotalElements()).isEqualTo(2);
-        assertThat(result.getContent().get(0).getTitle()).isEqualTo("테스트 게시글 1");
-        assertThat(result.getContent().get(1).getContent()).contains("테스트");
+        assertThat(result.getContent().get(0).title()).isEqualTo("테스트 게시글 1");
         
         verify(postRepository).findByTitleOrContentContainingIgnoreCaseWithAuthor(eq(searchQuery), any(Pageable.class));
     }

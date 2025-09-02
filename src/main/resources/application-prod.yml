@@ -1,6 +1,16 @@
 server:
   port: 8080
   forward-headers-strategy: native
+  # 프로덕션 환경에서는 추가 보안 설정 활성화
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+        same-site: strict
+  tomcat:
+    max-threads: 200
+    max-connections: 10000
 
 spring:
   application:
@@ -13,6 +23,11 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5
+  mvc:
+    throw-exception-if-no-handler-found: true  # 404 예외 발생 활성화 (운영 환경에도 필요)
+  web:
+    resources:
+      add-mappings: false  # 정적 리소스 매핑을 비활성화(404 처리에 필요)
   jpa:
     hibernate:
       ddl-auto: none
@@ -31,8 +46,8 @@ spring:
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 10MB
+      max-file-size: 5MB
+      max-request-size: 20MB
 
 logging:
   level:
@@ -58,28 +73,28 @@ springdoc:
     enabled: false
 
 jwt:
-  secret: ${JWT_SECRET}
-  access-exp-ms: ${JWT_ACCESS_EXP_MS}
-  issuer: ${JWT_ISSUER}
+  secret: ${JWT_SECRET:change_this_to_a_secure_secret_key_in_production}
+  access-exp-ms: ${JWT_ACCESS_EXP_MS:3600000}
+  issuer: ${JWT_ISSUER:community-app-prod}
 
 refresh:
-  exp-ms: ${REFRESH_EXP_MS}
+  exp-ms: ${REFRESH_EXP_MS:1209600000}
   cookie:
-    name: ${REFRESH_COOKIE_NAME}
-    path: ${REFRESH_COOKIE_PATH}
-    secure: ${REFRESH_COOKIE_SECURE}
-    same-site: ${REFRESH_COOKIE_SAME_SITE}
-    domain: ${REFRESH_COOKIE_DOMAIN}
+    name: ${REFRESH_COOKIE_NAME:refresh_token}
+    path: ${REFRESH_COOKIE_PATH:/api/auth}
+    secure: ${REFRESH_COOKIE_SECURE:true}
+    same-site: ${REFRESH_COOKIE_SAME_SITE:None}
+    domain: ${REFRESH_COOKIE_DOMAIN:.your-production-domain.com}
 
 app:
   cors:
-    allowed-origins: ${ALLOWED_ORIGINS}
+    allowed-origins: ${ALLOWED_ORIGINS:https://your-production-domain.com}
   security:
     token-hash-algorithm: ${SECURITY_HASH_ALGORITHM:SHA-256}
     max-refresh-tokens-per-user: ${MAX_REFRESH_TOKENS:5}
   # 운영도 CORS는 Security에서만. 별도 Origin 인터셉터는 기본 비활성화(필요시 환경변수로만 활성화)
   enable-origin-validation: ${ENABLE_ORIGIN_VALIDATION:false}
-  public-base-url: ${PUBLIC_BASE_URL}
+  public-base-url: ${PUBLIC_BASE_URL:https://your-production-domain.com/files}
   storage:
     provider: local
     local:

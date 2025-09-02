@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -40,14 +41,20 @@ public class CommentController {
      */
     @PreAuthorize("isAuthenticated()")
     @PostMapping("/api/posts/{postId}/comments")
-    public ResponseEntity<CommentRes> add(
+    public ResponseEntity<?> add(
             @PathVariable Long postId,
             @AuthenticationPrincipal MemberDetails me,
             @RequestBody @Valid CreateReq req
     ) {
-        Comment saved = commentService.add(postId, me.id(), req.content());
+        // 입력값 정규화 - 내용 트림 처리
+        String content = req.content() != null ? req.content().trim() : null;
+        
+        Comment saved = commentService.add(postId, me.id(), content);
         return ResponseEntity.created(URI.create("/api/comments/" + saved.getId()))
-                .body(CommentRes.of(saved));
+                .body(Map.of(
+                    "success", true,
+                    "comment", CommentRes.of(saved)
+                ));
     }
 
     /**
@@ -59,17 +66,24 @@ public class CommentController {
      * @return 페이징된 댓글 목록과 페이지 정보
      */
     @GetMapping("/api/posts/{postId}/comments")
-    public ResponseEntity<Map<String, Object>> getCommentsByPost(
+    public ResponseEntity<?> getCommentsByPost(
             @PathVariable Long postId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
+        // 페이지 크기 상한 제한 (최대 50개)
+        final int MAX_PAGE_SIZE = 50;
+        Pageable cappedPageable = pageable.getPageSize() > MAX_PAGE_SIZE ?
+                PageRequest.of(pageable.getPageNumber(), MAX_PAGE_SIZE, pageable.getSort()) :
+                pageable;
+        
         // 안전한 정렬 적용
-        Pageable safePageable = PageableUtil.getSafeCommentPageable(pageable);
+        Pageable safePageable = PageableUtil.getSafeCommentPageable(cappedPageable);
         
         Page<CommentProjection> projectionPage = 
                 commentService.getProjectionsByPostWithPaging(postId, safePageable);
         
-        Map<String, Object> response = Map.of(
+        return ResponseEntity.ok(Map.of(
+            "success", true,
             "content", projectionPage.getContent().stream().map(CommentRes::from).toList(),
             "pageInfo", Map.of(
                 "page", projectionPage.getNumber(),
@@ -79,9 +93,7 @@ public class CommentController {
                 "first", projectionPage.isFirst(),
                 "last", projectionPage.isLast()
             )
-        );
-        
-        return ResponseEntity.ok(response);
+        ));
     }
 
     /**
@@ -89,8 +101,11 @@ public class CommentController {
      */
     @PreAuthorize("hasRole('ADMIN') or @commentSecurity.isAuthor(#id, authentication)")
     @DeleteMapping("/api/comments/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<?> delete(@PathVariable Long id) {
         commentService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "댓글이 성공적으로 삭제되었습니다"
+        ));
     }
 }

@@ -13,10 +13,8 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-
 import java.util.List;
 import java.util.Set;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -125,16 +123,11 @@ class PostSecurityTest {
     @DisplayName("일반 사용자는 공지사항 작성 권한이 없어야 함")
     void regularUserCannotCreateNotice() {
         // given
-        com.example.community.service.dto.PostDtos.Create noticeDto = 
-                new com.example.community.service.dto.PostDtos.Create(
-                "공지사항 제목", 
-                "공지사항 내용", 
-                com.example.community.domain.BoardType.NOTICE, 
-                null
-        );
+        com.example.community.domain.BoardType noticeType = 
+                com.example.community.domain.BoardType.NOTICE;
 
         // when
-        boolean result = postSecurity.isNoticeAllowed(noticeDto);
+        boolean result = postSecurity.isBoardTypeAllowed(noticeType);
 
         // then
         assertThat(result).isFalse();
@@ -144,16 +137,11 @@ class PostSecurityTest {
     @DisplayName("일반 사용자는 자유게시판 작성 권한이 있어야 함")
     void regularUserCanCreateFreePost() {
         // given
-        com.example.community.service.dto.PostDtos.Create freeDto = 
-                new com.example.community.service.dto.PostDtos.Create(
-                "자유게시판 제목", 
-                "자유게시판 내용", 
-                com.example.community.domain.BoardType.FREE, 
-                null
-        );
+        com.example.community.domain.BoardType freeType = 
+                com.example.community.domain.BoardType.FREE;
 
         // when
-        boolean result = postSecurity.isNoticeAllowed(freeDto);
+        boolean result = postSecurity.isBoardTypeAllowed(freeType);
 
         // then
         assertThat(result).isTrue();

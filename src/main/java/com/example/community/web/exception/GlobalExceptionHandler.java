@@ -10,13 +10,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -40,6 +44,15 @@ public class GlobalExceptionHandler {
         m.put("code", code);
         return m;
     }
+    
+    /**
+     * 접근 권한 거부 예외 응답 생성 (공통 메서드)
+     */
+    private ResponseEntity<Map<String, Object>> createAccessDeniedResponse(String message) {
+        Map<String, Object> body = base(HttpStatus.FORBIDDEN, "access_denied");
+        body.put("message", message != null ? message : "해당 리소스에 대한 권한이 없습니다");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
 
     /**
      * Spring Security의 메서드 보안(PreAuthorize) 거부 예외 처리
@@ -47,9 +60,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AuthorizationDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAuthorizationDenied(AuthorizationDeniedException e) {
-        Map<String, Object> body = base(HttpStatus.FORBIDDEN, "access_denied");
-        body.put("message", "해당 리소스에 대한 권한이 없습니다");
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+        return createAccessDeniedResponse(null);
     }
 
     /**
@@ -57,9 +68,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleSpringAccessDenied(org.springframework.security.access.AccessDeniedException e) {
-        Map<String, Object> body = base(HttpStatus.FORBIDDEN, "access_denied");
-        body.put("message", "해당 리소스에 대한 권한이 없습니다");
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+        return createAccessDeniedResponse(null);
     }
 
     /**
@@ -110,23 +119,22 @@ public class GlobalExceptionHandler {
     }
     
     /**
-     * 접근 권한 없음 예외 처리
+     * 접근 권한 없음 예외 처리 (서비스 계층)
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException e) {
-        Map<String, Object> body = base(HttpStatus.FORBIDDEN, "access_denied");
-        body.put("message", e.getMessage());
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+        return createAccessDeniedResponse(e.getMessage());
     }
     
     /**
      * 스토리지 관련 예외 처리
+     * 내부 구현 정보 노출을 방지하기 위해 일반화된 메시지만 클라이언트에 전달
      */
     @ExceptionHandler(StorageException.class)
     public ResponseEntity<Map<String, Object>> handleStorageException(StorageException e) {
-        log.error("Storage error occurred", e);
+        log.error("Storage error", e);
         Map<String, Object> body = base(HttpStatus.INTERNAL_SERVER_ERROR, "storage_error");
-        body.put("message", e.getMessage());
+        body.put("message", "파일 처리 중 오류가 발생했습니다.");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
     
@@ -162,6 +170,23 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * JSON 파싱 오류 및 타입 불일치 처리
+     * 클라이언트가 보낸 JSON이 문법적으로 잘못되었거나 
+     * 타입이 요청 모델과 일치하지 않을 때 발생
+     */
+    @ExceptionHandler({ 
+        HttpMessageNotReadableException.class, 
+        MethodArgumentTypeMismatchException.class,
+        org.springframework.validation.BindException.class,
+        org.springframework.web.bind.MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<Map<String, Object>> handleBadPayload(Exception e) {
+        Map<String, Object> body = base(HttpStatus.BAD_REQUEST, "bad_request");
+        body.put("message", "요청 본문을 해석할 수 없습니다");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    /**
      * 데이터 무결성 위반 예외 처리
      * 보통 고유 제약 조건 위반이나 외래 키 제약 조건 위반 시 발생
      */
@@ -171,34 +196,74 @@ public class GlobalExceptionHandler {
         body.put("message", "중복된 데이터이거나 제약 조건을 위반했습니다");
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
+    
+    /**
+     * 지원하지 않는 HTTP 메서드 사용 시 예외 처리 (405 Method Not Allowed)
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        Map<String, Object> body = base(HttpStatus.METHOD_NOT_ALLOWED, "method_not_allowed");
+        body.put("message", String.format("지원하지 않는 HTTP 메서드입니다. 허용된 메서드: %s", 
+                String.join(", ", e.getSupportedMethods())));
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+    
+    /**
+     * 요청한 리소스를 찾을 수 없는 경우 예외 처리 (404 Not Found)
+     * 이 핸들러가 작동하려면 다음 설정이 필요합니다:
+     * spring.mvc.throw-exception-if-no-handler-found=true
+     * spring.web.resources.add-mappings=false
+     */
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoHandlerFound(NoHandlerFoundException e) {
+        Map<String, Object> body = base(HttpStatus.NOT_FOUND, "not_found");
+        body.put("message", String.format("요청한 리소스를 찾을 수 없습니다: %s %s", 
+                e.getHttpMethod(), e.getRequestURL()));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    /**
+     * 인증 관련 예외 응답 생성 (공통 메서드)
+     */
+    private ResponseEntity<Map<String, Object>> createAuthenticationErrorResponse(String code, String message) {
+        Map<String, Object> body = base(HttpStatus.UNAUTHORIZED, code);
+        body.put("message", message);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
 
     /**
      * 인증 관련 예외 처리
      */
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthentication(AuthenticationException e) {
-        Map<String, Object> body = base(HttpStatus.UNAUTHORIZED, "authentication_failed");
-        body.put("message", "인증에 실패했습니다");
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+        // BadCredentialsException은 별도 처리
+        if (e instanceof BadCredentialsException) {
+            return createAuthenticationErrorResponse(
+                "bad_credentials", 
+                "사용자명 또는 비밀번호가 올바르지 않습니다"
+            );
+        }
+        
+        return createAuthenticationErrorResponse(
+            "authentication_failed", 
+            "인증에 실패했습니다"
+        );
     }
 
-    /**
-     * 잘못된 인증 정보 예외 처리
-     */
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException e) {
-        Map<String, Object> body = base(HttpStatus.UNAUTHORIZED, "bad_credentials");
-        body.put("message", "사용자명 또는 비밀번호가 올바르지 않습니다");
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
-    }
-
+    // 보안 난수 생성기를 static으로 선언하여 재사용
+    private static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
+    
     /**
      * 기타 모든 예외 처리
      * 예상치 못한 예외가 발생했을 때의 마지막 안전망
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception e) {
-        String errorId = java.util.UUID.randomUUID().toString();
+        // 암호학적으로 안전한 난수 생성
+        byte[] randomBytes = new byte[16];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        String errorId = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        
         log.error("Unexpected error occurred (ID: {})", errorId, e);
         
         Map<String, Object> body = base(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error");

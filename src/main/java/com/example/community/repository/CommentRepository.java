@@ -1,32 +1,17 @@
 package com.example.community.repository;
 
 import com.example.community.domain.Comment;
-import com.example.community.domain.Post;
 import com.example.community.repository.dto.CommentProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface CommentRepository extends JpaRepository<Comment, Long> {
-    // 기존 메서드 유지 (하위 호환성)
-    @EntityGraph(attributePaths = {"author"})
-    List<Comment> findByPost(Post post);
-    
-    // 페이징 지원 메서드 추가
-    Page<Comment> findByPost(Post post, Pageable pageable);
-    
-    // 게시글 ID로 직접 조회하는 페이징 메서드 (성능 최적화)
-    @EntityGraph(attributePaths = {"author"})
-    @Query("SELECT c FROM Comment c WHERE c.post.id = :postId")
-    Page<Comment> findByPostId(@Param("postId") Long postId, Pageable pageable);
-    
     /**
      * 게시글 ID로 DTO 프로젝션을 사용하여 최적화된 댓글 조회
      * - N+1 쿼리 문제 방지

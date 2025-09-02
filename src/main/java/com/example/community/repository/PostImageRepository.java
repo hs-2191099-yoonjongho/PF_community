@@ -14,11 +14,7 @@ import java.util.Optional;
  * 게시글 이미지 리포지토리
  */
 public interface PostImageRepository extends JpaRepository<PostImage, Long> {
-    List<PostImage> findByPost(Post post);
-    
-    @Query("SELECT pi FROM PostImage pi WHERE pi.post.id = :postId")
-    List<PostImage> findByPostId(@Param("postId") Long postId);
-    
+      
     /**
      * 파일 키로 이미지 조회
      * @param fileKey 파일 키
@@ -27,11 +23,4 @@ public interface PostImageRepository extends JpaRepository<PostImage, Long> {
     @Query("SELECT pi FROM PostImage pi WHERE pi.fileKey = :fileKey")
     Optional<PostImage> findByFileKey(@Param("fileKey") String fileKey);
     
-    @Modifying
-    @Query("DELETE FROM PostImage pi WHERE pi.post.id = :postId")
-    void deleteByPostId(@Param("postId") Long postId);
-    
-    @Modifying
-    @Query("DELETE FROM PostImage pi WHERE pi.id = :id AND pi.post.id = :postId")
-    void deleteByIdAndPostId(@Param("id") Long id, @Param("postId") Long postId);
 }

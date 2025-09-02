@@ -1,10 +1,9 @@
 package com.example.community.service.dto;
 
+import com.example.community.domain.BoardType;
 import com.example.community.domain.Post;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 게시글 목록 조회용 요약 DTO
@@ -17,30 +16,26 @@ public record PostSummaryDto(
     LocalDateTime createdAt,
     long viewCount,
     long likeCount,
-    List<ImageMeta> images
+    BoardType boardType
 ) {
+    /**
+     * Post 엔티티로부터 요약 DTO 생성
+     * @param post 게시글 엔티티
+     * @return 요약 정보만 포함한 DTO (이미지 제외)
+     */
     public static PostSummaryDto from(Post post) {
-        List<ImageMeta> imageMetas = post.getImages().stream()
-                .map(img -> new ImageMeta(
-                        img.getFileKey(),
-                        img.getUrl()))
-                .collect(Collectors.toList());
+        if (post == null) {
+            throw new IllegalArgumentException("Post cannot be null");
+        }
                 
         return new PostSummaryDto(
             post.getId(),
             post.getTitle(),
-            post.getAuthor().getUsername(),
+            post.getAuthor() != null ? post.getAuthor().getUsername() : "알 수 없음",
             post.getCreatedAt(),
             post.getViewCount(),
             post.getLikeCount(),
-            imageMetas
+            post.getBoardType()
         );
-    }
-    
-    // 목록 변환 헬퍼 메서드
-    public static List<PostSummaryDto> listFrom(List<Post> posts) {
-        return posts.stream()
-                .map(PostSummaryDto::from)
-                .collect(Collectors.toList());
     }
 }

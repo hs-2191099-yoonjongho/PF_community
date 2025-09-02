@@ -39,6 +39,13 @@ public class Member extends BaseTimeEntity {
     @Column(name = "withdrawal_date")
     private LocalDateTime withdrawalDate; // 탈퇴일시
     
+    @Column(nullable = false)
+    @Builder.Default
+    private int tokenVersion = 0; // 토큰 버전 (로그아웃, 탈퇴 시 증가)
+    
+    @Version
+    private Long version; // 낙관적 잠금을 위한 버전 필드
+    
     // 권한 보유 여부 확인 메소드
     public boolean hasRole(String role) {
         return roles != null && roles.contains(role);
@@ -60,7 +67,7 @@ public class Member extends BaseTimeEntity {
         if (newPassword == null || newPassword.trim().isEmpty()) {
             throw new IllegalArgumentException("비밀번호는 필수입니다");
         }
-        this.password = newPassword; // 실제 구현에서는 서비스 레이어에서 암호화 처리
+        this.password = newPassword; 
     }
     
     // 회원 탈퇴 처리 메소드 - 상태 변경만 수행
@@ -85,5 +92,10 @@ public class Member extends BaseTimeEntity {
     
     public void setPassword(String password) {
         this.password = password;
+    }
+    
+    // 토큰 버전 증가 메소드 (모든 토큰 무효화)
+    public void bumpTokenVersion() {
+        this.tokenVersion++;
     }
 }

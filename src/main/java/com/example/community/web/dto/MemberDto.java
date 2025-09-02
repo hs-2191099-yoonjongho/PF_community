@@ -16,7 +16,18 @@ public record MemberDto(
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
+    /**
+     * Member 엔티티로부터 DTO를 생성합니다.
+     * 
+     * @param member 변환할 회원 엔티티
+     * @return 회원 정보가 담긴 DTO
+     * @throws IllegalArgumentException member가 null인 경우
+     */
     public static MemberDto from(Member member) {
+        if (member == null) {
+            throw new IllegalArgumentException("Member cannot be null");
+        }
+        
         return new MemberDto(
                 member.getId(),
                 member.getUsername(),

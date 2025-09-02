@@ -8,10 +8,16 @@ public record PostImageRes(
 ) {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PostImageRes.class);
     
+    /**
+     * PostImage 엔티티로부터 응답 DTO 생성
+     * 
+     * @param image 변환할 이미지 엔티티
+     * @return 이미지 정보가 담긴 DTO
+     * @throws IllegalArgumentException image가 null인 경우
+     */
     public static PostImageRes of(PostImage image) {
         if (image == null) {
-            log.warn("이미지 변환 시도 중 null 이미지 발견");
-            return null;
+            throw new IllegalArgumentException("PostImage cannot be null");
         }
         
         try {
