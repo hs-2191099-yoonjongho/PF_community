@@ -25,7 +25,7 @@ import java.util.Map;
 public class FileController {
 
     private final FileService fileService;
-    
+
     /**
      * 게시글용 이미지 업로드 API - 다중 파일 업로드 지원
      * 한 번에 여러 이미지를 업로드할 수 있습니다.
@@ -35,25 +35,53 @@ public class FileController {
      */
     @PreAuthorize("isAuthenticated()")
     @PostMapping(value = "/posts/images", consumes = "multipart/form-data")
-    public ResponseEntity<List<String>> uploadPostImages(
+    public ResponseEntity<?> uploadPostImages(
             @RequestParam("files") List<MultipartFile> files,
-            @AuthenticationPrincipal MemberDetails me
-    ) {
-        log.info("게시글 이미지 업로드 요청: 파일 수={}, 사용자ID={}", files.size(), me.id());
-        
+            @AuthenticationPrincipal MemberDetails me) {
+        // NPE 방지: 비어 있음 체크 후 로그
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException(FilePolicy.ERR_FILE_EMPTY);
+        }
+        log.info("게시글 이미지 업로드 요청: 파일 수={}, 사용자ID={}", files.size(), me.getId());
+
+        // 파일 개수 상한 제한 (최대 10개)
+        final int MAX_FILES_COUNT = 10;
+        if (files.size() > MAX_FILES_COUNT) {
+            throw new IllegalArgumentException("한 번에 최대 " + MAX_FILES_COUNT + "개의 파일만 업로드할 수 있습니다");
+        }
+
+        // 각 파일의 타입/크기/MIME 1차 필터
+        for (MultipartFile file : files) {
+            if (file.isEmpty()) {
+                throw new IllegalArgumentException("빈 파일은 업로드할 수 없습니다");
+            }
+            if (file.getSize() > FilePolicy.MAX_FILE_SIZE_BYTES) {
+                throw new IllegalArgumentException(
+                        String.format(FilePolicy.ERR_FILE_TOO_LARGE, FilePolicy.MAX_FILE_SIZE_BYTES));
+            }
+            // MIME 1차 필터: 화이트리스트 기반
+            String ct = (file.getContentType() == null ? "" : file.getContentType().toLowerCase());
+            if (!FilePolicy.ALLOWED_IMAGE_TYPES.contains(ct)) {
+                throw new IllegalArgumentException(
+                        String.format(FilePolicy.ERR_INVALID_FILE_TYPE, FilePolicy.ALLOWED_IMAGE_TYPES));
+            }
+        }
+
         // 전체 크기 제한 검증
         long totalSize = files.stream().mapToLong(MultipartFile::getSize).sum();
         if (FilePolicy.isTotalSizeExceeded(totalSize)) {
             throw new IllegalArgumentException(
-                String.format(FilePolicy.ERR_TOTAL_SIZE_EXCEEDED, FilePolicy.MAX_TOTAL_SIZE_BYTES));
+                    String.format(FilePolicy.ERR_TOTAL_SIZE_EXCEEDED, FilePolicy.MAX_TOTAL_SIZE_BYTES));
         }
-        
-        List<String> uploaded = fileService.uploadPostImageKeys(files, me.id());
+
+        List<String> uploaded = fileService.uploadPostImageKeys(files, me.getId());
         log.info("게시글 이미지 업로드 완료: 업로드 수={}", uploaded.size());
-        
-        return ResponseEntity.ok(uploaded);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "fileKeys", uploaded));
     }
-    
+
     /**
      * 게시글 이미지 삭제 API
      * 이미지 키를 기준으로 이미지를 삭제합니다.
@@ -63,29 +91,28 @@ public class FileController {
      */
     @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/posts/images")
-    public ResponseEntity<Map<String, Boolean>> deletePostImage(
+    public ResponseEntity<?> deletePostImage(
             @RequestParam("key") String key,
-            @AuthenticationPrincipal MemberDetails me
-    ) {
-        log.info("게시글 이미지 삭제 요청: 키={}, 사용자ID={}", key, me.id());
-        
+            @AuthenticationPrincipal MemberDetails me) {
+        log.info("게시글 이미지 삭제 요청: 키={}, 사용자ID={}", key, me.getId());
+
+        // 키가 비어있는지 확인
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("삭제할 이미지 키가 없습니다");
+        }
+
         // 1. Path Traversal 방지 (보안: 악의적인 경로 접근 차단)
         if (!FilePolicy.isPathSafe(key)) {
             throw new IllegalArgumentException(FilePolicy.ERR_PATH_TRAVERSAL);
         }
-        
-        try {
-            // 2. 권한 검증 및 삭제 처리 - DB 연동 (보안: 권한 없는 파일 삭제 방지)
-            fileService.deletePostImage(key, me.id());
-            log.info("게시글 이미지 삭제 완료: 키={}", key);
-            
-            return ResponseEntity.ok(Map.of("deleted", true));
-        } catch (Exception e) {
-            log.error("이미지 삭제 중 오류 발생: 키={}, 오류={}", key, e.getMessage(), e);
-            
-            // 이미 없는 파일이거나 권한이 없는 경우에도 삭제 성공으로 응답
-            // 클라이언트 입장에서는 파일이 존재하지 않는 것이 목표 상태이므로
-            return ResponseEntity.ok(Map.of("deleted", true));
-        }
+
+        // 2. 권한 검증 및 삭제 처리 - DB 연동 (보안: 권한 없는 파일 삭제 방지)
+        fileService.deletePostImage(key, me.getId());
+        log.info("게시글 이미지 삭제 완료: 키={}", key);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "deleted", true,
+                "message", "이미지가 성공적으로 삭제되었습니다"));
     }
 }

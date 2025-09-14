@@ -35,16 +35,16 @@ public class AuthControllerConfigTest {
 
     @MockitoBean
     private RefreshTokenService refreshTokenService;
-    
+
     @MockitoBean
     private JwtUtil jwtUtil;
-    
+
     @MockitoBean
     private MemberRepository memberRepository;
-    
+
     @MockitoBean
     private AuthenticationManager authenticationManager;
-    
+
     @Value("${ALLOWED_ORIGINS}")
     private String allowedOriginsStr;
 
@@ -64,14 +64,14 @@ public class AuthControllerConfigTest {
         // Spring은 이미 @Value로 값을 할당했으므로 직접 테스트
         String testValue = "site1.com,site1.com,,site2.com";
         String[] parts = testValue.split(",");
-        
+
         // 간단한 파싱 로직 검증
         List<String> parsedValues = java.util.Arrays.stream(parts)
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .distinct()
                 .toList();
-        
+
         // 검증
         assertNotNull(parsedValues);
         assertEquals(2, parsedValues.size()); // 중복 및 빈 값 제거됨

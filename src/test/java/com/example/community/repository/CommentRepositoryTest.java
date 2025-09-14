@@ -19,14 +19,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 @org.springframework.test.context.ActiveProfiles("test")
 class CommentRepositoryTest {
 
-    @Autowired private CommentRepository comments;
-    @Autowired private PostRepository posts;
-    @Autowired private MemberRepository members;
+    @Autowired
+    private CommentRepository comments;
+    @Autowired
+    private PostRepository posts;
+    @Autowired
+    private MemberRepository members;
 
     @Test
     @DisplayName("프로젝션 기반 댓글 페이징 조회")
     void find_projections_by_post() {
-        Member m = members.save(Member.builder().username("u1").email("u1@test.com").password("p").roles(Set.of("ROLE_USER")).build());
+        Member m = members.save(
+                Member.builder().username("u1").email("u1@test.com").password("p").roles(Set.of("ROLE_USER")).build());
         Post p = posts.save(Post.builder().title("t").content("c").author(m).build());
         comments.save(Comment.builder().post(p).author(m).content("c1").build());
         comments.save(Comment.builder().post(p).author(m).content("c2").build());

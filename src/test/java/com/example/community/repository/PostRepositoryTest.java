@@ -18,17 +18,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 @org.springframework.test.context.ActiveProfiles("test")
 class PostRepositoryTest {
 
-    @Autowired private PostRepository posts;
-    @Autowired private MemberRepository members;
+    @Autowired
+    private PostRepository posts;
+    @Autowired
+    private MemberRepository members;
 
     @Test
     @DisplayName("BoardType별 페이징 조회 동작")
     void find_by_boardType() {
-        Member m = members.save(Member.builder().username("u1").email("u1@test.com").password("p").roles(Set.of("ROLE_USER")).build());
+        Member m = members.save(
+                Member.builder().username("u1").email("u1@test.com").password("p").roles(Set.of("ROLE_USER")).build());
         posts.save(Post.builder().title("a").content("c").boardType(BoardType.FREE).author(m).build());
         posts.save(Post.builder().title("b").content("c").boardType(BoardType.FREE).author(m).build());
 
-        Page<Post> page = posts.findByBoardType(BoardType.FREE, PageRequest.of(0, 10));
+        Page<Post> page = posts.findWithAuthorByBoardTypeAndQuery(BoardType.FREE, "", PageRequest.of(0, 10));
         assertThat(page.getTotalElements()).isEqualTo(2);
     }
 }

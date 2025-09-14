@@ -1,46 +1,36 @@
 package com.example.community.service.dto;
 
-import com.example.community.domain.Post;
+import com.example.community.domain.BoardType;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 게시글 목록 조회용 요약 DTO
  * 게시글 목록 조회 시 본문 내용을 제외한 요약 정보만 포함하여 성능 최적화
  */
 public record PostSummaryDto(
-    Long id,
-    String title,
-    String authorName,
-    LocalDateTime createdAt,
-    long viewCount,
-    long likeCount,
-    List<ImageMeta> images
-) {
-    public static PostSummaryDto from(Post post) {
-        List<ImageMeta> imageMetas = post.getImages().stream()
-                .map(img -> new ImageMeta(
-                        img.getFileKey(),
-                        img.getUrl()))
-                .collect(Collectors.toList());
-                
-        return new PostSummaryDto(
-            post.getId(),
-            post.getTitle(),
-            post.getAuthor().getUsername(),
-            post.getCreatedAt(),
-            post.getViewCount(),
-            post.getLikeCount(),
-            imageMetas
-        );
-    }
-    
-    // 목록 변환 헬퍼 메서드
-    public static List<PostSummaryDto> listFrom(List<Post> posts) {
-        return posts.stream()
-                .map(PostSummaryDto::from)
-                .collect(Collectors.toList());
+        Long id,
+        String title,
+        String authorName,
+        LocalDateTime createdAt,
+        long viewCount,
+        long likeCount,
+        BoardType boardType) {
+    /**
+     * 필드 기반 팩토리 메서드 (엔티티 의존성 제거)
+     */
+    public static PostSummaryDto from(
+            Long id,
+            String title,
+            String authorName,
+            LocalDateTime createdAt,
+            long viewCount,
+            long likeCount,
+            BoardType boardType) {
+        if (id == null)
+            throw new IllegalArgumentException("id cannot be null");
+        if (createdAt == null)
+            throw new IllegalArgumentException("createdAt cannot be null");
+        return new PostSummaryDto(id, title, authorName, createdAt, viewCount, likeCount, boardType);
     }
 }

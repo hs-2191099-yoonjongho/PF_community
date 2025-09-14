@@ -24,7 +24,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.http.HttpHeaders;
 import com.example.community.repository.MemberRepository;
 
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -42,9 +42,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(addFilters = false)
 class AuthControllerSecurityTest {
 
-    @Autowired private MockMvc mvc;
-    @Autowired private RefreshTokenService refreshTokenService;
-    @Autowired private JwtUtil jwtUtil;
+    @Autowired
+    private MockMvc mvc;
+    @Autowired
+    private RefreshTokenService refreshTokenService;
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @Test
     @DisplayName("/api/auth/refresh - 헤더 없으면 403")
@@ -57,9 +60,9 @@ class AuthControllerSecurityTest {
     @DisplayName("/api/auth/refresh - 헤더는 있으나 쿠키 없으면 401")
     void refresh_unauthorized_without_cookie() throws Exception {
         mvc.perform(post("/api/auth/refresh").with(csrf())
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .header(HttpHeaders.ORIGIN, "http://test1.example")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header(HttpHeaders.ORIGIN, "http://test1.example")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -70,14 +73,14 @@ class AuthControllerSecurityTest {
         Member user = Member.builder().id(1L).email("user@example.com").username("u").password("p").build();
         when(token.getUser()).thenReturn(user);
         when(refreshTokenService.validateAndGet("old")).thenReturn(token);
-        when(refreshTokenService.rotate(token)).thenReturn("new");
-        when(jwtUtil.generateAccessToken(anyString())).thenReturn("access");
+        when(refreshTokenService.rotate("old")).thenReturn("new");
+        when(jwtUtil.generateAccessToken(anyLong())).thenReturn("access");
 
         mvc.perform(post("/api/auth/refresh").with(csrf())
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .header(HttpHeaders.ORIGIN, "http://test1.example")
-                        .cookie(new Cookie("refresh_token", "old"))
-                        .contentType(MediaType.APPLICATION_JSON))
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header(HttpHeaders.ORIGIN, "http://test1.example")
+                .cookie(new Cookie("refresh_token", "old"))
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("refresh_token")))
                 .andExpect(jsonPath("$.accessToken").value("access"));
@@ -85,10 +88,29 @@ class AuthControllerSecurityTest {
 
     @TestConfiguration
     static class TestConfig {
-        @Bean RefreshTokenService refreshTokenService() { return Mockito.mock(RefreshTokenService.class); }
-        @Bean JwtUtil jwtUtil() { return Mockito.mock(JwtUtil.class); }
-        @Bean MemberService memberService() { return Mockito.mock(MemberService.class); }
-    @Bean AuthenticationManager authenticationManager() { return Mockito.mock(AuthenticationManager.class); }
-    @Bean MemberRepository memberRepository() { return Mockito.mock(MemberRepository.class); }
+        @Bean
+        RefreshTokenService refreshTokenService() {
+            return Mockito.mock(RefreshTokenService.class);
+        }
+
+        @Bean
+        JwtUtil jwtUtil() {
+            return Mockito.mock(JwtUtil.class);
+        }
+
+        @Bean
+        MemberService memberService() {
+            return Mockito.mock(MemberService.class);
+        }
+
+        @Bean
+        AuthenticationManager authenticationManager() {
+            return Mockito.mock(AuthenticationManager.class);
+        }
+
+        @Bean
+        MemberRepository memberRepository() {
+            return Mockito.mock(MemberRepository.class);
+        }
     }
 }

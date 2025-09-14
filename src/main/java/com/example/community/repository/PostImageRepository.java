@@ -1,37 +1,24 @@
 package com.example.community.repository;
 
-import com.example.community.domain.Post;
 import com.example.community.domain.PostImage;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
-import java.util.List;
-import java.util.Optional;
+
 
 /**
- * 게시글 이미지 리포지토리
+ * 게시글 이미지 엔티티에 대한 데이터 접근 인터페이스
+ * 이미지 조회 및 관리 기능을 제공합니다.
  */
 public interface PostImageRepository extends JpaRepository<PostImage, Long> {
-    List<PostImage> findByPost(Post post);
-    
-    @Query("SELECT pi FROM PostImage pi WHERE pi.post.id = :postId")
-    List<PostImage> findByPostId(@Param("postId") Long postId);
-    
     /**
-     * 파일 키로 이미지 조회
-     * @param fileKey 파일 키
-     * @return 이미지 엔티티 (Optional)
+     * 파일 키와 게시글 작성자 ID가 모두 일치할 때만 삭제 (TOCTOU 방지)
+     * 
+     * @param fileKey  파일 키
+     * @param authorId 작성자 ID
+     * @return 삭제된 row 수
      */
-    @Query("SELECT pi FROM PostImage pi WHERE pi.fileKey = :fileKey")
-    Optional<PostImage> findByFileKey(@Param("fileKey") String fileKey);
-    
-    @Modifying
-    @Query("DELETE FROM PostImage pi WHERE pi.post.id = :postId")
-    void deleteByPostId(@Param("postId") Long postId);
-    
-    @Modifying
-    @Query("DELETE FROM PostImage pi WHERE pi.id = :id AND pi.post.id = :postId")
-    void deleteByIdAndPostId(@Param("id") Long id, @Param("postId") Long postId);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    int deleteByFileKeyAndPost_Author_Id(String fileKey, Long authorId);
+
 }

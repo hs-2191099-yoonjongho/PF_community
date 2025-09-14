@@ -24,15 +24,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class CorsPolicyTest {
 
-    @Autowired private MockMvc mvc;
+    @Autowired
+    private MockMvc mvc;
 
     @Test
     @DisplayName("프리플라이트 요청은 200과 CORS 헤더를 반환")
     void preflight_ok_with_headers() throws Exception {
         mvc.perform(options("/api/auth/login")
-                        .header(HttpHeaders.ORIGIN, "http://allowed.example")
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.POST.name())
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization, Content-Type, X-Requested-With, Accept"))
+                .header(HttpHeaders.ORIGIN, "http://allowed.example")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.POST.name())
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                        "Authorization, Content-Type, X-Requested-With, Accept"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://allowed.example"))
                 .andExpect(header().string("Access-Control-Allow-Credentials", "true"));

@@ -7,7 +7,6 @@ import com.example.community.repository.MemberRepository;
 import com.example.community.security.MemberDetails;
 import com.example.community.service.MemberService;
 import com.example.community.service.RefreshTokenService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +26,7 @@ import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,126 +39,128 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
 @TestPropertySource(properties = {
-    "refresh.exp-ms=3600000",
-    "refresh.cookie.name=refresh_token",
-    "refresh.cookie.path=/api/auth",
-    "refresh.cookie.secure=false",
-        "refresh.cookie.same-site=Lax",
-        "ALLOWED_ORIGINS=http://localhost:3000"
+                "refresh.exp-ms=3600000",
+                "refresh.cookie.name=refresh_token",
+                "refresh.cookie.path=/api/auth",
+                "refresh.cookie.secure=false",
+                "refresh.cookie.same-site=Lax",
+                "ALLOWED_ORIGINS=http://localhost:3000"
 })
 class AuthControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+        @Autowired
+        private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+        @MockitoBean
+        private AuthenticationManager authenticationManager;
 
-    @MockitoBean
-    private AuthenticationManager authenticationManager;
+        @MockitoBean
+        private JwtUtil jwtUtil;
 
-    @MockitoBean
-    private JwtUtil jwtUtil;
+        @MockitoBean
+        private MemberRepository memberRepository;
 
-    @MockitoBean
-    private MemberRepository memberRepository;
+        @MockitoBean
+        private RefreshTokenService refreshTokenService;
 
-    @MockitoBean
-    private RefreshTokenService refreshTokenService;
+        @MockitoBean
+        private MemberService memberService;
 
-    @MockitoBean
-    private MemberService memberService;
+        @Test
+        @DisplayName("로그인 성공 시 액세스 토큰과 리프레시 토큰 쿠키 반환")
+        void loginSuccessTest() throws Exception {
+                // given
+                String loginRequestJson = "{\"email\":\"test@example.com\",\"password\":\"password\"}";
 
-    @Test
-    @DisplayName("로그인 성공 시 액세스 토큰과 리프레시 토큰 쿠키 반환")
-    void loginSuccessTest() throws Exception {
-        // given
-        AuthController.LoginReq loginRequest = new AuthController.LoginReq();
-        loginRequest.setEmail("test@example.com");
-        loginRequest.setPassword("password");
+                Member testMember = Member.builder()
+                                .id(1L)
+                                .username("testuser")
+                                .email("test@example.com")
+                                .password("password")
+                                .roles(Set.of("ROLE_USER"))
+                                .build();
+                // memberService.findByEmail 삭제됨: memberRepository.findByEmail로 대체
+                when(memberRepository.findByEmail(anyString())).thenReturn(Optional.of(testMember));
 
-        Member testMember = Member.builder()
-                .id(1L)
-                .username("testuser")
-                .email("test@example.com")
-                .password("password")
-                .roles(Set.of("ROLE_USER"))
-                .build();
+                MemberDetails memberDetails = new MemberDetails(
+                                testMember.getId(),
+                                testMember.getEmail(),
+                                testMember.getPassword(),
+                                Set.of(new SimpleGrantedAuthority("ROLE_USER")));
 
-        MemberDetails memberDetails = new MemberDetails(
-                testMember.getId(),
-                testMember.getEmail(),
-                testMember.getPassword(),
-                Set.of(new SimpleGrantedAuthority("ROLE_USER"))
-        );
+                Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                memberDetails, null, memberDetails.getAuthorities());
 
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                memberDetails, null, memberDetails.getAuthorities());
+                when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(authentication);
+                when(memberRepository.findByEmail(anyString())).thenReturn(Optional.of(testMember));
+                when(jwtUtil.generateAccessToken(anyLong())).thenReturn("test.access.token"); // id 기반이지만, 실제 컨트롤러는 id를
+                                                                                              // long으로 넘김
+                when(refreshTokenService.issueByUserId(anyLong())).thenReturn("test-refresh-token");
 
-        when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(authentication);
-        when(memberRepository.findByEmail(anyString())).thenReturn(Optional.of(testMember));
-        when(jwtUtil.generateAccessToken(anyString())).thenReturn("test.access.token");
-        when(refreshTokenService.issue(any(Member.class))).thenReturn("test-refresh-token");
+                // when & then
+                mockMvc.perform(post("/api/auth/login")
+                                .with(csrf())
+                                .header("Origin", "http://localhost:3000")
+                                .header("X-Requested-With", "XMLHttpRequest") // AJAX 요청 헤더 추가
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(loginRequestJson))
+                                .andExpect(status().isOk())
+                                .andExpect(cookie().exists("refresh_token"))
+                                .andExpect(cookie().httpOnly("refresh_token", true))
+                                .andExpect(header().exists("Cache-Control"))
+                                .andExpect(jsonPath("$.accessToken").value("test.access.token"));
+        }
 
-        // when & then
-        mockMvc.perform(post("/api/auth/login")
-                .with(csrf())
-                .header("Origin", "http://localhost:3000")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
-                .andExpect(status().isOk())
-                .andExpect(cookie().exists("refresh_token"))
-                .andExpect(cookie().httpOnly("refresh_token", true))
-                .andExpect(jsonPath("$.accessToken").value("test.access.token"));
-    }
+        @Test
+        @DisplayName("리프레시 토큰으로 새 액세스 토큰 발급")
+        void refreshTokenTest() throws Exception {
+                // given
+                Member testMember = Member.builder()
+                                .id(1L)
+                                .username("testuser")
+                                .email("test@example.com")
+                                .password("password")
+                                .roles(Set.of("ROLE_USER"))
+                                .build();
 
-    @Test
-    @DisplayName("리프레시 토큰으로 새 액세스 토큰 발급")
-    void refreshTokenTest() throws Exception {
-        // given
-        Member testMember = Member.builder()
-                .id(1L)
-                .username("testuser")
-                .email("test@example.com")
-                .password("password")
-                .roles(Set.of("ROLE_USER"))
-                .build();
+                RefreshToken refreshToken = RefreshToken.builder()
+                                .id(1L)
+                                .tokenHash("hashedToken")
+                                .user(testMember)
+                                .revoked(false)
+                                .build();
 
-        RefreshToken refreshToken = RefreshToken.builder()
-                .id(1L)
-                .tokenHash("hashedToken")
-                .user(testMember)
-                .revoked(false)
-                .build();
+                when(refreshTokenService.validateAndGet(anyString())).thenReturn(refreshToken);
+                when(refreshTokenService.rotate(anyString())).thenReturn("new-refresh-token");
+                when(jwtUtil.generateAccessToken(anyLong())).thenReturn("new.access.token"); // id 기반
 
-        when(refreshTokenService.validateAndGet(anyString())).thenReturn(refreshToken);
-        when(refreshTokenService.rotate(any(RefreshToken.class))).thenReturn("new-refresh-token");
-        when(jwtUtil.generateAccessToken(anyString())).thenReturn("new.access.token");
+                // when & then
+                mockMvc.perform(post("/api/auth/refresh")
+                                .with(csrf())
+                                .header("Origin", "http://localhost:3000")
+                                .header("X-Requested-With", "XMLHttpRequest")
+                                .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
+                                .andExpect(status().isOk())
+                                .andExpect(cookie().exists("refresh_token"))
+                                .andExpect(cookie().value("refresh_token", "new-refresh-token"))
+                                .andExpect(header().exists("Cache-Control"))
+                                .andExpect(jsonPath("$.accessToken").value("new.access.token"));
+        }
 
-        // when & then
-        mockMvc.perform(post("/api/auth/refresh")
-                .with(csrf())
-                .header("Origin", "http://localhost:3000")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .cookie(new jakarta.servlet.http.Cookie("refresh_token", "old-refresh-token")))
-                .andExpect(status().isOk())
-                .andExpect(cookie().exists("refresh_token"))
-                .andExpect(cookie().value("refresh_token", "new-refresh-token"))
-                .andExpect(jsonPath("$.accessToken").value("new.access.token"));
-    }
+        @Test
+        @DisplayName("로그아웃 시 리프레시 토큰 폐기 및 쿠키 삭제")
+        void logoutTest() throws Exception {
+                // given - 특별한 설정 필요 없음
 
-    @Test
-    @DisplayName("로그아웃 시 리프레시 토큰 폐기 및 쿠키 삭제")
-    void logoutTest() throws Exception {
-        // given - 특별한 설정 필요 없음
-
-        // when & then
-        mockMvc.perform(post("/api/auth/logout")
-                .with(csrf())
-                .header("Origin", "http://localhost:3000")
-                .cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token-to-revoke")))
-                .andExpect(status().isOk())
-                .andExpect(cookie().exists("refresh_token"))
-                .andExpect(cookie().maxAge("refresh_token", 0));
-    }
+                // when & then
+                mockMvc.perform(post("/api/auth/logout")
+                                .with(csrf())
+                                .header("Origin", "http://localhost:3000")
+                                .header("X-Requested-With", "XMLHttpRequest") // AJAX 요청 헤더 추가
+                                .cookie(new jakarta.servlet.http.Cookie("refresh_token", "refresh-token-to-revoke")))
+                                .andExpect(status().isOk())
+                                .andExpect(cookie().exists("refresh_token"))
+                                .andExpect(cookie().maxAge("refresh_token", 0))
+                                .andExpect(header().exists("Cache-Control"));
+        }
 }

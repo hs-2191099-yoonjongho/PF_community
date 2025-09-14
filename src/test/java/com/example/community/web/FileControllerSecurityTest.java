@@ -15,12 +15,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-    "app.public-base-url=http://localhost:8080/files",
-    "app.storage.local.base-path=${java.io.tmpdir}/community-test-uploads"
+        "app.public-base-url=http://localhost:8080/files",
+        "app.storage.local.base-path=${java.io.tmpdir}/community-test-uploads"
 })
 class FileControllerSecurityTest {
 
-    @Autowired private MockMvc mvc;
+    @Autowired
+    private MockMvc mvc;
 
     @Test
     @DisplayName("정적 /files/** 경로는 401/403 없이 공개 접근 가능 (존재하면 200, 없으면 404)")
@@ -29,7 +30,8 @@ class FileControllerSecurityTest {
         mvc.perform(get("/files/does-not-exist.png"))
                 .andExpect(result -> {
                     int s = result.getResponse().getStatus();
-                    if (s == 401 || s == 403) throw new AssertionError("/files/** 가 보안에 차단됨");
+                    if (s == 401 || s == 403)
+                        throw new AssertionError("/files/** 가 보안에 차단됨");
                 });
     }
 }

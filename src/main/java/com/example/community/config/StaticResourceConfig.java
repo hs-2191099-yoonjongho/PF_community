@@ -14,17 +14,17 @@ import java.net.URI;
  */
 @Configuration
 public class StaticResourceConfig implements WebMvcConfigurer {
-    
+
     @Value("${app.storage.local.base-path:uploads}")
     private String storagePath;
-    
+
     @Value("${app.public-base-url}")
     private String publicBaseUrl; // 예: http://localhost:8080/uploads
-    
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String absolutePath = Paths.get(storagePath).toAbsolutePath().normalize().toString();
-        
+
         // publicBaseUrl의 path만 추출 (예: /uploads)
         String handlerPath = URI.create(publicBaseUrl).getPath();
         if (handlerPath.isEmpty()) {
@@ -33,18 +33,12 @@ public class StaticResourceConfig implements WebMvcConfigurer {
         if (!handlerPath.endsWith("/")) {
             handlerPath += "/";
         }
-        
+
         // 추출된 경로로 정적 리소스 핸들러 설정 (예: '/uploads/**')
         registry.addResourceHandler(handlerPath + "**")
                 .addResourceLocations("file:" + absolutePath + "/")
                 .setCachePeriod(3600) // 1시간 캐싱
                 .resourceChain(true);
-        
-        // 운영 환경에서는 Nginx 설정으로 대체 권장:
-        // location /uploads/ { 
-        //     alias /절대/경로/uploads/; 
-        //     expires 1d;
-        //     add_header Cache-Control "public";
-        // }
+
     }
 }

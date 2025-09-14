@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 public class EnhancedCorsPolicyTest {
 
-    @Autowired 
+    @Autowired
     private MockMvc mockMvc;
 
     @Test
@@ -36,11 +36,11 @@ public class EnhancedCorsPolicyTest {
     void preflightRequest_fromAllowedOrigin_shouldSucceed() throws Exception {
         // Given & When
         ResultActions result = performPreflightRequest("http://test1.example");
-        
+
         // Then
         result.andExpect(status().isOk())
-              .andExpect(header().string("Access-Control-Allow-Origin", "http://test1.example"))
-              .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://test1.example"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 
     // Helper 메서드
